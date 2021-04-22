@@ -68,12 +68,12 @@ __global__ __launch_bounds__(block_size) void acc_spmv(
     const auto local_id = group.thread_rank();
 
     for (std::int64_t col = local_id; col < num_cols; col += block_size) {
-        local_result += mtx(row_idx, col) * b(col, 1);
+        local_result += mtx(row_idx, col) * b(col, 0);
     }
     shared[local_id] = local_result;
     reduce(group, shared);
     if (local_id == 0) {
-        res(row_idx, 1) = shared[local_id];
+        res(row_idx, 0) = shared[local_id];
     }
 }
 
