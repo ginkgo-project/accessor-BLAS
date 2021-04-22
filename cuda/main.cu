@@ -52,7 +52,7 @@ int main() {
     constexpr matrix_info minfo{{num_rows, num_rows}};
     
     std::cout << "Total matrix size: " << minfo.get_1d_size() * sizeof(vtype) << '\n';
-    static_assert(minfo.size[0] == minfo.size[1], "Matrix must be square!");
+    //static_assert(minfo.size[0] == minfo.size[1], "Matrix must be square!");
     
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<stype> val_dist(1.0, 2.0);
@@ -126,6 +126,16 @@ int main() {
         ctimer.reset();
     }
     std::cout << "Access time: " << acc_time / bench_iters << " ms\n";
+    
+    double acc2_time{};
+    for (int i = 0; i < bench_iters; ++i) {
+        ctimer.start();
+        acc_spmv<vtype>(minfo, dv_matrix.data(), vinfo, dv_b.data(), dv_res.data());
+        ctimer.stop();
+        acc2_time += ctimer.get_time();
+        ctimer.reset();
+    }
+    std::cout << "Acces2 time: " << acc2_time / bench_iters << " ms\n";
     
     auto gpu_res = dv_res.get_vector();
 
