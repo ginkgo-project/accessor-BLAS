@@ -55,6 +55,7 @@ template <std::int64_t block_size, typename MtxRange, typename BRange, typename 
 __global__ __launch_bounds__(block_size) void acc_spmv(
     MtxRange mtx, BRange b, ResRange res) {
     using ar_type = decltype(+mtx(0, 0));
+    static_assert(std::is_same<ar_type, double>::value, "Type must be double!!!");
     // expect vinfo.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
     if (row_idx > mtx.length(0)) {
