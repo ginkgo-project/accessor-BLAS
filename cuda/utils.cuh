@@ -51,8 +51,11 @@ std::vector<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
 
 template <typename ResultType, typename InputType>
 std::vector<ResultType> convert_mtx(const matrix_info &info,
-                                    const std::vector<InputType> &input) {
-    std::vector<ResultType> output(info.get_1d_size());
+                                    const std::vector<InputType> &input,
+                                    std::vector<ResultType> &output) {
+    if (output.size() < info.get_1d_size()) {
+        throw "Error";
+    }
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
@@ -116,6 +119,14 @@ class GpuMemory {
                              cudaMemcpyDeviceToHost));
         return vec;
     }
+    void get_vector(std::vector<ValueType> &vec) const {
+        if (vec.size() > num_elems_) {
+            throw "Error!!";
+        }
+        CUDA_CALL(cudaMemcpy(vec.data(), data_, num_elems_ * sizeof(ValueType),
+                             cudaMemcpyDeviceToHost));
+    }
+
 
    private:
     std::size_t size_;
