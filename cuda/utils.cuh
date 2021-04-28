@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cublas_v2.h>
+
 #include <array>
 #include <iostream>
+#include <functional>
+#include <memory>
 #include <stdexcept>
 #include <vector>
-
 
 #define CUDA_CALL(call)                                                  \
     do {                                                                 \
@@ -17,6 +20,16 @@
         }                                                                \
     } while (false)
 
+#define CUBLAS_CALL(call)                                                 \
+    do {                                                                  \
+        auto err = call;                                                  \
+        if (err != CUBLAS_STATUS_SUCCESS) {                               \
+            std::cerr << "Cuda error in file " << __FILE__                \
+                      << " L:" << __LINE__ << "; Error: " << err << '\n'; \
+            throw std::runtime_error("Error");                            \
+        }                                                                 \
+    } while (false)
+
 struct matrix_info {
     const std::array<std::size_t, 2> size;
     const std::size_t stride;
@@ -24,7 +37,7 @@ struct matrix_info {
     constexpr matrix_info(const std::array<std::size_t, 2> size)
         : size(size), stride{size[1]} {}
     constexpr matrix_info(const std::array<std::size_t, 2> size,
-                       const std::size_t stride)
+                          const std::size_t stride)
         : size(size), stride{stride} {}
 
     std::size_t get_1d_size() const { return size[0] * stride; }
@@ -49,20 +62,18 @@ std::vector<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
     return res;
 }
 
-template <typename ResultType, typename InputType>
-std::vector<ResultType> convert_mtx(const matrix_info &info,
-                                    const std::vector<InputType> &input,
-                                    std::vector<ResultType> &output) {
+template <typename ResultType, typename InputType, typename Callable>
+void convert_mtx(const matrix_info &info, const std::vector<InputType> &input,
+                 std::vector<ResultType> &output, Callable convert) {
     if (output.size() < info.get_1d_size()) {
         throw "Error";
     }
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
-            output[idx] = static_cast<ResultType>(input[idx]);
+            output[idx] = convert(input[idx]);
         }
     }
-    return output;
 }
 
 template <typename ValueType>
@@ -81,7 +92,6 @@ void print_mtx(const matrix_info &info, const std::vector<ValueType> &vec) {
 
 void synchronize() { CUDA_CALL(cudaDeviceSynchronize()); }
 
-
 template <typename ValueType>
 class GpuMemory {
    public:
@@ -92,9 +102,7 @@ class GpuMemory {
     }
     ~GpuMemory() { cudaFree(data_); }
 
-    ValueType *data() {
-        return data_;
-    }
+    ValueType *data() { return data_; }
 
     void re_allocate() {
         CUDA_CALL(cudaFree(data_));
@@ -127,13 +135,11 @@ class GpuMemory {
                              cudaMemcpyDeviceToHost));
     }
 
-
    private:
     std::size_t size_;
     std::size_t num_elems_;
     ValueType *data_;
 };
-
 
 struct cuda_event {
    public:
@@ -178,4 +184,13 @@ class CudaTimer {
     cuda_event end_;
 };
 
+using CublasContext = std::remove_pointer_t<cublasHandle_t>;
+
+std::unique_ptr<CublasContext, std::function<void (cublasHandle_t)>>
+get_cublas_handle() {
+    cublasHandle_t handle;
+    CUBLAS_CALL(cublasCreate(&handle));
+    return {handle,
+            [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
+}
 

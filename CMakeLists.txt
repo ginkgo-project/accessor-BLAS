@@ -8,8 +8,20 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-set(GINKGO_DIR "$ENV{HOME}/projects/ginkgo_github" CACHE PATH
+set(GINKGO_DIR "" CACHE PATH
     "Directory of Ginkgo")
+
+string(COMPARE EQUAL "${GINKGO_DIR}" "" empty_ginkgo_dir)
+# If directory not specified, try to find it. If not found, clone it locally
+if (empty_ginkgo_dir)
+    #find_package("Ginkgo")
+    #if (Ginkgo_FOUND)
+    #    message(STATUS "Using external version of package Ginkgo. In case of problems, consider setting the directory of Ginkgo manually with -DGINKGO_DIR=<directory/to/Ginkgo>.")
+    #else()
+    #endif()
+    message(STATUS "GINKGO_DIR was not specified. Cloning Ginkgo into build directory...")
+    # TODO
+endif()
 
 function(example_apply_default_target_settings target)
     target_compile_features("${target}" PUBLIC cxx_std_14)
@@ -21,6 +33,8 @@ endfunction()
 
 if (ACCESSOR_CUDA)
     enable_language(CUDA)
+    find_library(CUBLAS cublas
+        HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
     set(target "accessor_cuda")
     add_executable("${target}")
     example_apply_default_target_settings("${target}")
@@ -34,6 +48,7 @@ if (ACCESSOR_CUDA)
 
 
     #TODO maybe add the Ginkgo Architecture Selector in this project
+    #     OR simply use `CUDA_ARCHITECTURES` to choose the fitting architecture
     target_compile_options("${target}" PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
         $<$<COMPILE_LANGUAGE:CUDA>:--gpu-architecture=compute_52>
@@ -43,6 +58,7 @@ if (ACCESSOR_CUDA)
         # Make sure the cpp files are treated as cu files
         #$<$<COMPILE_LANGUAGE:CUDA>:-x cu>
         )
+    target_link_libraries("${target}" PRIVATE "${CUBLAS}")
 
     target_include_directories("${target}" PRIVATE
         "${GINKGO_DIR}"
