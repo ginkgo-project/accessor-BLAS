@@ -128,7 +128,7 @@ void acc_gemv(const matrix_info minfo, const StType *mtx,
 }
 
 #define BIND_CUBLAS_GEMM(ValueType, CublasName)                                \
-    void cublas_gemv(cublasHandle_t handle, cublasOperation_t transa,          \
+    void cublas_gemm(cublasHandle_t handle, cublasOperation_t transa,          \
                      cublasOperation_t transb, int m, int n, int k,            \
                      const ValueType *alpha, const ValueType *a, int lda,      \
                      const ValueType *b, int ldb, const ValueType *beta,       \
@@ -140,7 +140,17 @@ BIND_CUBLAS_GEMM(double, cublasDgemm)
 BIND_CUBLAS_GEMM(float, cublasSgemm)
 #undef BIND_CUBLAS_GEMM
 
-// TODO add GEMV
+#define BIND_CUBLAS_GEMV(ValueType, CublasName)                              \
+    void cublas_gemv(cublasHandle_t handle, cublasOperation_t transa, int m, \
+                     int n, const ValueType *alpha, const ValueType *A,      \
+                     int lda, const ValueType *x, int incx,                  \
+                     const ValueType *beta, ValueType *y, int incy) {        \
+        CUBLAS_CALL(CublasName(handle, transa, m, n, alpha, A, lda, x, incx, \
+                               beta, y, incy));                              \
+    }
+BIND_CUBLAS_GEMV(double, cublasDgemv)
+BIND_CUBLAS_GEMV(float, cublasSgemv)
+#undef BIND_CUBLAS_GEMM
 
 template <typename ValueType>
 void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
@@ -150,10 +160,18 @@ void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
     //       so the sizes will be transposed for the cublas call
     auto alpha = ValueType{1};
     auto beta = ValueType{0};
-    cublas_gemv(
+    //*
+    cublas_gemv(handle, CUBLAS_OP_T, static_cast<int>(minfo.size[0]),
+                static_cast<int>(minfo.size[1]), &alpha, mtx,
+                static_cast<int>(minfo.stride), b,
+                static_cast<int>(vinfo.stride), &beta, res,
+                static_cast<int>(vinfo.stride));
+    /*/
+    cublas_gemm(
         handle, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(vinfo.size[1]),
         static_cast<int>(vinfo.size[0]), static_cast<int>(minfo.size[1]),
         &alpha, b, vinfo.stride, mtx, static_cast<int>(minfo.stride), &beta,
         res, static_cast<int>(vinfo.stride));
+    //*/
 }
 

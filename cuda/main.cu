@@ -293,9 +293,9 @@ int main() {
 
         d_time = benchmark_function(d_func);
         // d_func();
-        // dv_res.get_vector(v_res);
+        //dv_res.get_vector(v_res);
         // d_error = compare(vinfo, v_res_ref, v_res, v_reduce);
-        // v_res_ref = v_res;
+        //v_res_ref = v_res;
 
         s_time = benchmark_function(s_func);
         // ds_res.get_vector(s_res);
@@ -321,7 +321,9 @@ int main() {
         //*/
 
         cd_time = benchmark_function(cd_func);
-        // dv_res.get_vector(d_res);
+        //dv_res.get_vector(v_res);
+        //auto cd_error = compare(vinfo, v_res_ref, v_res, v_reduce);
+        //std::cout << cd_error << '\n';
         // std::cout << s_error << ' ' << avs_error << '\t'
         //          << (s_error / avs_error) << '\n';
         cs_time = benchmark_function(cs_func);
