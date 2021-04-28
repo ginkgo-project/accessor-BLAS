@@ -190,6 +190,9 @@ std::unique_ptr<CublasContext, std::function<void (cublasHandle_t)>>
 get_cublas_handle() {
     cublasHandle_t handle;
     CUBLAS_CALL(cublasCreate(&handle));
+    CUBLAS_CALL(
+        cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
+    // CUBLAS_POINTER_MODE_DEVICE
     return {handle,
             [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
 }
