@@ -5,14 +5,17 @@
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
-//#include <vector>
 
-#include "../error_tobias.hpp"
+//#include "../error_tobias.hpp"
+#include "gemv_memory.cuh"
 #include "kernels.cuh"
 #include "matrix_helper.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
+
+// TODO: finish error computation
 
 template <typename ValueType>
 void control_gemv(const matrix_info m_info, ValueType alpha,
@@ -21,19 +24,19 @@ void control_gemv(const matrix_info m_info, ValueType alpha,
     if (x_info.size[1] != 1) {
         throw "Error!";
     }
-    for (std::size_t i = 0; i < x_info.size[0]; ++i) {
-        res[i * x_info.stride] *= beta;
-    }
     for (std::size_t row = 0; row < m_info.size[0]; ++row) {
+        ValueType local_res{0};
         for (std::size_t col = 0; col < m_info.size[1]; ++col) {
             const std::size_t midx = row * m_info.stride + col;
-            res[row] += alpha * mtx[midx] * x[col * x_info.stride];
+            local_res += mtx[midx] * x[col * x_info.stride];
         }
+        auto res_idx = row * x_info.stride;
+        res[res_idx] = beta * res[res_idx] + alpha * local_res;
     }
 }
 
-template <typename OutputType, typename VectorType, typename ReduceOp>
-OutputType reduce(const matrix_info info, VectorType &tmp, ReduceOp op) {
+template <typename OutputType, typename InputType, typename ReduceOp>
+OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
     std::size_t end = info.size[0];
     for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
          halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
@@ -67,45 +70,39 @@ get_value(T val) {
 template <typename ReferenceType, typename OtherType, typename ValueType>
 ValueType compare(const matrix_info info, const ReferenceType *mtx1,
                   const OtherType *mtx2, ValueType *tmp) {
-    // ReferenceType error{};
     using return_type = decltype(get_value(ReferenceType{}));
+    static_assert(std::is_same<return_type, ValueType>::value,
+                  "Types must match!");
 
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        const std::size_t midx = row * info.stride;
-        tmp[midx] = ValueType{};
-    }
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         const std::size_t midx = row * info.stride;
         const auto v1 = get_value(mtx1[midx]);
         const decltype(v1) v2 = get_value(mtx2[midx]);
-        const auto delta = std::abs(v1 - v2);
-        tmp[midx] = delta;
+        if (std::is_floating_point<decltype(v1)>::value) {
+            const auto delta = std::abs(v1 - v2);
+            tmp[midx] = delta;
+        } else {
+            // only compute the 1-norm of the error
+            const auto error = std::abs(v2);
+            tmp[midx] = error;
+        }
     }
-    /*
-    std::cout << '\n';
-    for (std::size_t i = 0; i < info.size[0]; ++i) {
-        std::cout << tmp[i] << ' ';
-    }
-    std::cout << '\n';
-    for (std::size_t i = 0; i < info.size[0]; ++i) {
-        std::cout << i % 10 << ' ';
-        for (int j = 10; j < tmp[i]; j *= 10)
-            std::cout << ' ';
-    }
-    std::cout << '\n';
-    //*/
+
     return reduce<ValueType>(
         info, tmp, [](ValueType o1, ValueType o2) { return o1 + o2; });
 }
 
 template <typename Callable>
-double benchmark_function(Callable func) {
+double benchmark_function(Callable func, bool skip = false) {
     constexpr int bench_iters{10};
     double time_ms[bench_iters];
     CudaTimer ctimer;
     // Warmup
     func();
     synchronize();
+    if (skip) {
+        return {};
+    }
     for (int i = 0; i < bench_iters; ++i) {
         ctimer.start();
         func();
@@ -123,171 +120,47 @@ double benchmark_function(Callable func) {
     return bench_iters == 0 ? double{} : result_ms;
 }
 
-template <typename ValueType>
-class GemvMemory {
-   private:
-    static constexpr auto CPU_device = Memory<ValueType>::Device::cpu;
-    static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
-
-   public:
-    template <typename MtxDist, typename VectDist, typename RndEngine>
-    GemvMemory(std::size_t max_rows, std::size_t max_cols, MtxDist &&mtx_dist,
-               VectDist &&vect_dist, RndEngine &&engine)
-        : m_info_{{max_rows, max_cols}},
-          x_info_{{max_cols, 1}},
-          res_info_{{max_rows, 1}},
-          cpu_mtx_(gen_mtx<ValueType>(m_info_, mtx_dist, engine)),
-          cpu_x_(gen_mtx<ValueType>(x_info_, vect_dist, engine)),
-          cpu_res_(gen_mtx<ValueType>(res_info_, vect_dist, engine)),
-          gpu_mtx_(GPU_device, m_info_.get_1d_size()),
-          gpu_x_(GPU_device, x_info_.get_1d_size()),
-          gpu_res_(GPU_device, res_info_.get_1d_size()) {
-        gpu_mtx_.copy_from(cpu_mtx_);
-        gpu_x_.copy_from(cpu_x_);
-        gpu_res_.copy_from(cpu_res_);
-    }
-    template <typename OtherType>
-    GemvMemory(const GemvMemory<OtherType> &other)
-        : m_info_(other.m_info_),
-          x_info_(other.x_info_),
-          res_info_(other.res_info_),
-          cpu_mtx_(CPU_device, m_info_.get_1d_size()),
-          cpu_x_(CPU_device, x_info_.get_1d_size()),
-          cpu_res_(CPU_device, res_info_.get_1d_size()),
-          gpu_mtx_(GPU_device, m_info_.get_1d_size()),
-          gpu_x_(GPU_device, x_info_.get_1d_size()),
-          gpu_res_(GPU_device, res_info_.get_1d_size()) {
-        convert_mtx(m_info_, other.cpu_mtx_const(), cpu_mtx(),
-                    [](OtherType v) { return static_cast<ValueType>(v); });
-        convert_mtx(x_info_, other.cpu_x_const(), cpu_x(),
-                    [](OtherType v) { return static_cast<ValueType>(v); });
-        convert_mtx(res_info_, other.cpu_res_const(), cpu_res(),
-                    [](OtherType v) { return static_cast<ValueType>(v); });
-        gpu_mtx_.copy_from(cpu_mtx_);
-        gpu_x_.copy_from(cpu_x_);
-        gpu_res_.copy_from(cpu_res_);
-    }
-
-    void copy_result_to_cpu() { gpu_res_.get_vector(cpu_res_); }
-
-   protected:
-    ValueType *cpu_mtx() { return cpu_mtx_.data(); }
-    ValueType *cpu_x() { return cpu_x_.data(); }
-
-   public:
-    ValueType *cpu_res() { return cpu_res_.data(); }
-
-    const ValueType *cpu_mtx_const() const { return cpu_mtx_.const_data(); }
-    const ValueType *cpu_x_const() const { return cpu_x_.const_data(); }
-    const ValueType *cpu_res_const() const { return cpu_res_.const_data(); }
-    const ValueType *cpu_mtx() const { return cpu_mtx_const(); }
-    const ValueType *cpu_x() const { return cpu_x_const(); }
-    const ValueType *cpu_res() const { return cpu_res_const(); }
-
-   protected:
-    ValueType *gpu_mtx() { return gpu_mtx_.const_data(); }
-    ValueType *gpu_x() { return gpu_x_.const_data(); }
-
-   public:
-    ValueType *gpu_res() { return gpu_res_.data(); }
-
-    const ValueType *gpu_mtx_const() const { return gpu_mtx_.const_data(); }
-    const ValueType *gpu_x_const() const { return gpu_x_.const_data(); }
-    const ValueType *gpu_res_const() const { return gpu_res_.const_data(); }
-    const ValueType *gpu_mtx() const { return gpu_mtx_const(); }
-    const ValueType *gpu_x() const { return gpu_x_const(); }
-    const ValueType *gpu_res() const { return gpu_res_const(); }
-
-    const matrix_info m_info_;
-    const matrix_info x_info_;
-    const matrix_info res_info_;
-
-   private:
-    Memory<ValueType> cpu_mtx_;
-    Memory<ValueType> cpu_x_;
-    Memory<ValueType> cpu_res_;
-
-    Memory<ValueType> gpu_mtx_;
-    Memory<ValueType> gpu_x_;
-    Memory<ValueType> gpu_res_;
-};
-
-int main() {
+int main(int argc, char **argv) {
     /*
     using ar_type = error_number<double>;
     using st_type = error_number<float>;
     using value_type = ar_type::value_type;
-    auto convert_func = [](ar_type val) {
-        return st_type{static_cast<st_type::value_type>(val.v),
-                       static_cast<st_type::value_type>(val.e)};
-    };
     /*/
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
-
     //*/
+
+    constexpr ar_type ar_alpha{1.0};
+    constexpr ar_type ar_beta{1.0};
+    constexpr st_type st_alpha{static_cast<st_type>(ar_alpha)};
+    constexpr st_type st_beta{static_cast<st_type>(ar_beta)};
+
+    bool measure_error{false};
+
+    const std::string use_error_string("--error");
+    if (argc == 2 && std::string(argv[1]) == use_error_string) {
+        measure_error = true;
+    } else if (argc > 1) {
+        const std::string binary(argv[0]);
+        std::cerr << "Unsupported parameters!\n";
+        std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
+        std::cerr << "With " << use_error_string
+                  << ":    compute error of GeMVs\n"
+                  << "Without parameters: benchmark different GeMVs\n";
+        return 1;
+    }
+
+    const bool reset_result{measure_error && ar_beta != 0};
+    const bool normalize_error{true};
 
     constexpr std::size_t max_rows{24 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
-    const ar_type ar_alpha{1.0};
-    const ar_type ar_beta{1.0};
-    const st_type st_alpha{static_cast<st_type>(ar_alpha)};
-    const st_type st_beta{static_cast<st_type>(ar_beta)};
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(-2.0, 2.0);
-    // std::normal_distribution<value_type> mtx_dist(1, 2);
-    //*
-    // std::uniform_real_distribution<value_type> vector_dist(-2.0, 2.0);
-    // std::uniform_real_distribution<value_type> vector_dist(1.0, 1.0);
     auto vector_dist = mtx_dist;
-    /*/
-
-    auto vector_dist = [rnd = 0](auto val) mutable {
-        return (rnd = (rnd + 1) % 40) == 0
-                   ? 1
-                   : std::numeric_limits<float>::epsilon() / 2;
-        // return std::numeric_limits<float>::epsilon() / 2;
-    };
-    std::cout << std::numeric_limits<float>::epsilon() / 2 << '\n';
-    //*/
-
-    /*
-    constexpr std::size_t tmp_size{1000};
-    std::vector<float> tmp(tmp_size);
-    for (int i = 0; i < tmp_size; ++i) {
-        tmp[i] = vector_dist(1);
-    }
-
-    double d_sum{};
-    float f_sum{};
-    for (int i = 0; i < tmp_size; ++i) {
-        d_sum += tmp[i];
-        f_sum += tmp[i];
-    }
-    std::cout.precision(16);
-    std::cout << std::scientific;
-    std::cout << "float  sum = " << f_sum
-            << "\ndouble sum = " << static_cast<float>(d_sum)
-            << '\n';
-    return 0;
-    //*/
-    /*
-    constexpr std::size_t red_size{1};
-    std::cout << "Beginning...\n";
-    std::vector<int> a(red_size, 0);
-    std::vector<int> b(red_size, 1);
-    std::vector<int> tmp(red_size);
-    std::cout << "Running compare...\n";
-    std::cout << compare({{red_size, 1}}, a, b, tmp) << '\n';
-    return 0;
-    //*/
-
-    // auto v_res_ref = std::vector<ar_type>(max_x_info.get_1d_size(),
-    // ar_type{}); auto v_reduce =
-    //    std::vector<value_type>(max_x_info.get_1d_size(), value_type{});
 
     auto ar_data =
         GemvMemory<ar_type>(max_rows, max_cols, mtx_dist, vector_dist, rengine);
@@ -297,30 +170,61 @@ int main() {
 
     static_assert(max_rows == max_cols, "Matrix must be square!");
 
-    std::cout << "Num Rows" << DELIM << "GEMV double" << DELIM << "GEMV float"
-              << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
-              << "GEMV Acc<fp64, fp32>" << DELIM << "CUBLAS GEMV fp64" << DELIM
-              << "CUBLAS GEMV fp32" << '\n';
+    // Additional memory and lambdas for error computation
+    const auto max_res_num_elems = ar_data.cpu_res_memory().get_num_elems();
+    Memory<ar_type> cpu_res_ref(Memory<ar_type>::Device::cpu,
+                                max_res_num_elems);
+    value_type res_ref_norm{1.0};
+    auto ar_cpu_res_init = ar_data.cpu_res_memory();
+    auto st_cpu_res_init = st_data.cpu_res_memory();
+    Memory<value_type> reduce_memory(Memory<ar_type>::Device::cpu,
+                                     max_res_num_elems);
+    auto ar_compute_error = [&](const matrix_info &x_info) {
+        value_type error{};
+        if (measure_error) {
+            ar_data.sync_result();
+            error = compare(x_info, cpu_res_ref.const_data(),
+                            ar_data.cpu_res_const(), reduce_memory.data());
+        }
+        if (reset_result) {
+            ar_data.gpu_res_memory() = ar_cpu_res_init;
+        }
+        return error / res_ref_norm;
+    };
+    auto st_compute_error = [&](const matrix_info &x_info) {
+        value_type error{};
+        if (measure_error) {
+            st_data.sync_result();
+            error = compare(x_info, cpu_res_ref.const_data(),
+                            st_data.cpu_res_const(), reduce_memory.data());
+        }
+        if (reset_result) {
+            st_data.gpu_res_memory() = st_cpu_res_init;
+        }
+        return error / res_ref_norm;
+    };
+
+    if (!measure_error) {
+        std::cout << "Num Rows" << DELIM << "GEMV double" << DELIM
+                  << "GEMV float" << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
+                  << "GEMV Acc<fp64, fp32>" << DELIM << "CUBLAS GEMV fp64"
+                  << DELIM << "CUBLAS GEMV fp32" << '\n';
+    } else {
+        std::cout << "Num Rows" << DELIM << "Error GEMV double" << DELIM
+                  << "Error GEMV float" << DELIM << "Error GEMV Acc<fp64, fp64>"
+                  << DELIM << "Error GEMV Acc<fp64, fp32>" << DELIM
+                  << "Error CUBLAS GEMV fp64" << DELIM
+                  << "Error CUBLAS GEMV fp32" << '\n';
+    }
 
     std::cout.precision(16);
     std::cout << std::scientific;
-    /*
-    std::cout << "single_error           Acc<fp64, fp32> error    single_error "
-                 "/ acc_error\n";
-    */
 
     constexpr auto start = max_rows / 48;
     constexpr auto row_incr = start;
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
-        // for (int i = 0; i < 10; ++i) {
         const matrix_info m_info{{num_rows, num_rows}};
         const matrix_info x_info{{num_rows, 1}};
-        // const matrix_info res_info{{num_rows, 1}};
-
-        // v_matrix = gen_mtx<ar_type>(m_info, mtx_dist, rengine);
-        // convert_mtx<st_type>(m_info, v_matrix, s_matrix, convert_func);
-        // dv_matrix.copy_from(v_matrix);
-        // ds_matrix.copy_from(s_matrix);
 
         double ar_time{};
         auto ar_func = [&]() {
@@ -356,68 +260,54 @@ int main() {
                         st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(),
                         st_beta, st_data.gpu_res());
         };
-        // ar_type d_error{};
-        [[gnu::unused, maybe_unused]] value_type st_error{};
-        //[[ gnu::unused, maybe_unused ]] ar_type acc_ar_error{};
-        [[gnu::unused, maybe_unused]] value_type acc_mix_error{};
-        [[gnu::unused, maybe_unused]] value_type cublas_ar_error{};
-        [[gnu::unused, maybe_unused]] value_type cublas_st_error{};
+        value_type ar_error{};  // [[gnu::unused, maybe_unused]]
+        value_type st_error{};
+        ar_type acc_ar_error{};
+        value_type acc_mix_error{};
+        value_type cublas_ar_error{};
+        value_type cublas_st_error{};
 
         // control_gemv(m_info, v_matrix, x_info, v_b, v_res_ref);
 
-        ar_time = benchmark_function(ar_func);
-        // ar_func();
-        // dv_res.get_vector(v_res);
-        // d_error = compare(x_info, v_res_ref, v_res, v_reduce);
-        // v_res_ref = v_res;
+        ar_time = benchmark_function(ar_func, measure_error);
+        // Use the result here as the reference
+        if (measure_error) {
+            cpu_res_ref = ar_data.gpu_res_memory();
+            if (normalize_error) {
+                res_ref_norm = reduce<value_type>(
+                    x_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
+                        return std::abs(a) + std::abs(b);
+                    });
+                // copy again since reduce overwrites
+                cpu_res_ref = ar_data.gpu_res_memory();
+            }
+        }
+        ar_error = ar_compute_error(x_info);
 
-        st_time = benchmark_function(st_func);
-        // ds_res.get_vector(s_res);
-        //*
-        // std::cout << "single: x_res[0] = " << s_res[0] << '\n';
-        // st_error = compare(x_info, v_res_ref, s_res, v_reduce);
-        /*/
-        convert_mtx(x_info, s_res, v_reduce, [](st_type v) { return v.e; });
-        st_error = reduce<value_type>(
-            x_info, v_reduce, [](value_type a, value_type b) { return a + b; });
-        //*/
+        st_time = benchmark_function(st_func, measure_error);
+        st_error = st_compute_error(x_info);
 
-        acc_ar_time = benchmark_function(acc_ar_func);
-        acc_mix_time = benchmark_function(acc_mix_func);
-        // ds_res.get_vector(s_res);
-        //*
-        // std::cout << "access: x_res[0] = " << s_res[0] << '\n';
-        // acc_mix_error = compare(x_info, v_res_ref, s_res, v_reduce);
-        /*/
-        convert_mtx(x_info, s_res, v_reduce, [](st_type v) { return v.e; });
-        acc_mix_error = reduce<value_type>(
-            x_info, v_reduce, [](value_type a, value_type b) { return a + b; });
-        //*/
+        acc_ar_time = benchmark_function(acc_ar_func, measure_error);
+        acc_ar_error = ar_compute_error(x_info);
 
-        cublas_ar_time = benchmark_function(cublas_ar_func);
-        // dv_res.get_vector(v_res);
-        // auto cd_error = compare(x_info, v_res_ref, v_res, v_reduce);
-        // std::cout << cd_error << '\n';
-        // std::cout << st_error << ' ' << acc_mix_error << '\t'
-        //          << (st_error / acc_mix_error) << '\n';
-        cublas_st_time = benchmark_function(cublas_st_func);
-        // ds_res.get_vector(s_res);
-        //*
-        // std::cout << "access: x_res[0] = " << s_res[0] << '\n';
-        // cublas_st_error = compare(x_info, v_res_ref, s_res, v_reduce);
+        acc_mix_time = benchmark_function(acc_mix_func, measure_error);
+        acc_mix_error = st_compute_error(x_info);
 
-        //*
-        std::cout << num_rows << DELIM << ar_time << DELIM << st_time << DELIM
-                  << acc_ar_time << DELIM << acc_mix_time << DELIM
-                  << cublas_ar_time << DELIM << cublas_st_time << '\n';
-        //*/
-        /*
-        std::cout << "Comparison:"
-                << "\nDouble: " << d_error
-                << "\nSingle: " << st_error
-                << "\nAcc_vv: " << acc_ar_error
-                << "\nAcc_vs: " << acc_mix_error
-                << '\n';
-        //*/
+        cublas_ar_time = benchmark_function(cublas_ar_func, measure_error);
+        cublas_ar_error = ar_compute_error(x_info);
+
+        cublas_st_time = benchmark_function(cublas_st_func, measure_error);
+        cublas_st_error = st_compute_error(x_info);
+
+        if (!measure_error) {
+            std::cout << num_rows << DELIM << ar_time << DELIM << st_time
+                      << DELIM << acc_ar_time << DELIM << acc_mix_time << DELIM
+                      << cublas_ar_time << DELIM << cublas_st_time << '\n';
+        } else {
+            std::cout << num_rows << DELIM << ar_error << DELIM << st_error
+                      << DELIM << acc_ar_error << DELIM << acc_mix_error
+                      << DELIM << cublas_ar_error << DELIM << cublas_st_error
+                      << '\n';
+        }
     }
 }

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <functional>
+#include <memory>
 #include <stdexcept>
 
 #define CUDA_CALL(call)                                                  \
