@@ -3,11 +3,8 @@
 #include <cublas_v2.h>
 
 #include <array>
-#include <iostream>
 #include <functional>
-#include <memory>
 #include <stdexcept>
-#include <vector>
 
 #define CUDA_CALL(call)                                                  \
     do {                                                                 \
@@ -44,104 +41,10 @@ struct matrix_info {
     std::size_t get_num_elems() const { return size[0] * size[1]; }
 };
 
-template <typename ValueType, typename ValueDist, typename Engine>
-std::vector<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
-                               Engine &&engine) {
-    if (info.stride < info.size[1]) {
-        throw "Error!";
-    }
-    std::vector<ValueType> res(info.get_1d_size());
-
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        for (std::size_t col = 0; col < info.size[1]; ++col) {
-            const std::size_t idx = row * info.stride + col;
-            res[idx] = dist(engine);
-        }
-    }
-
-    return res;
-}
-
-template <typename ResultType, typename InputType, typename Callable>
-void convert_mtx(const matrix_info &info, const InputType *input,
-                 ResultType *output, Callable convert) {
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        for (std::size_t col = 0; col < info.size[1]; ++col) {
-            const std::size_t idx = row * info.stride + col;
-            output[idx] = convert(input[idx]);
-        }
-    }
-}
-
-template <typename ValueType>
-void print_mtx(const matrix_info &info, const ValueType *vec) {
-    for (std::size_t i = 0; i < info.size[0]; ++i) {
-        for (std::size_t j = 0; j < info.size[1]; ++j) {
-            const auto idx = i * info.stride + j;
-            std::cout << vec[idx] << '\t';
-        }
-        std::cout << '\n';
-    }
-}
-
 ///////////// GPU relevant code \\\\\\\\\\\\\
 
 
 void synchronize() { CUDA_CALL(cudaDeviceSynchronize()); }
-
-template <typename ValueType>
-class GpuMemory {
-   public:
-    GpuMemory(std::size_t num_elems)
-        : num_elems_{num_elems}, size_{num_elems * sizeof(ValueType)} {
-        cudaSetDevice(0);
-        CUDA_CALL(cudaMalloc(&data_, size_));
-    }
-    ~GpuMemory() { cudaFree(data_); }
-
-    ValueType *data() { return data_; }
-    const ValueType *data_const() const { return data_; }
-    const ValueType *data() const { return data_; }
-
-    void re_allocate() {
-        CUDA_CALL(cudaFree(data_));
-        CUDA_CALL(cudaMalloc(&data_, size_));
-    }
-
-    void copy_from(const std::vector<ValueType> &vec) {
-        if (vec.size() > num_elems_) {
-            throw "Error!!";
-        }
-        CUDA_CALL(cudaMemcpy(data_, vec.data(), vec.size() * sizeof(ValueType),
-                             cudaMemcpyHostToDevice));
-    }
-    
-    void copy_from(const ValueType *other_data, std::size_t num_elems) {
-        if (num_elems > num_elems_) {
-            throw "Error";
-        }
-        CUDA_CALL(cudaMemcpy(data_, other_data, num_elems * sizeof(ValueType),
-                             cudaMemcpyHostToDevice));
-    }
-
-
-    std::size_t get_num_elems() const { return num_elems_; }
-
-    std::size_t get_byte_size() const { return size_; }
-
-    void get_vector(std::vector<ValueType> &vec) const {
-        if (vec.size() > num_elems_) {
-            throw "Error!!";
-        }
-        CUDA_CALL(cudaMemcpy(vec.data(), data_, num_elems_ * sizeof(ValueType),
-                             cudaMemcpyDeviceToHost));
-    }
-
-   private:
-    std::size_t size_;
-    std::size_t num_elems_;
-    ValueType *data_;
-};
 
 struct cuda_event {
    public:
@@ -188,12 +91,11 @@ class CudaTimer {
 
 using CublasContext = std::remove_pointer_t<cublasHandle_t>;
 
-std::unique_ptr<CublasContext, std::function<void (cublasHandle_t)>>
+std::unique_ptr<CublasContext, std::function<void(cublasHandle_t)>>
 get_cublas_handle() {
     cublasHandle_t handle;
     CUBLAS_CALL(cublasCreate(&handle));
-    CUBLAS_CALL(
-        cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
+    CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
     // CUBLAS_POINTER_MODE_DEVICE
     return {handle,
             [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
