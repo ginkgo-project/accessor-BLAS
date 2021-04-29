@@ -26,8 +26,8 @@ __device__ void reduce(Group &&group, ValueType *__restrict__ shared) {
 
 template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void gemv(
-    const matrix_info minfo, const ValueType *__restrict__ mtx,
-    const matrix_info vinfo, const ValueType *__restrict__ b,
+    const matrix_info minfo, ValueType alpha, const ValueType *__restrict__ mtx,
+    const matrix_info vinfo, const ValueType *__restrict__ x, ValueType beta,
     ValueType *__restrict__ res) {
     // expect vinfo.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
@@ -39,26 +39,37 @@ __global__ __launch_bounds__(block_size) void gemv(
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
     ValueType local_result{};
+    const ValueType old_res =
+        (beta == 0) ? ValueType{0} : res[row_idx * vinfo.stride];
     const auto group = cg::this_thread_block();
     const auto local_id = group.thread_rank();
 
     for (std::int64_t col = local_id; col < minfo.size[1]; col += block_size) {
         const auto mtx_val = mtx[row_start + col];
-        const auto b_val = b[col * vinfo.stride];
+        const auto b_val = x[col * vinfo.stride];
         local_result += mtx_val * b_val;
     }
     shared[local_id] = local_result;
     reduce(group, shared);
     if (local_id == 0) {
-        res[row_idx * vinfo.stride] = shared[local_id];
+        const auto v_idx = row_idx * vinfo.stride;
+        if (beta == ValueType{0}) {
+            res[v_idx] = alpha * shared[local_id];
+        } else {
+            res[v_idx] = alpha * shared[local_id] + beta * res[v_idx];
+        }
     }
 }
 
-template <std::int64_t block_size, typename MtxRange, typename BRange,
-          typename ResRange>
-__global__ __launch_bounds__(block_size) void acc_gemv(MtxRange mtx, BRange b,
+template <std::int64_t block_size, typename MtxRange, typename XRange,
+          typename ResRange, typename ArType>
+__global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
+                                                       MtxRange mtx, XRange x,
+                                                       ArType beta,
                                                        ResRange res) {
     using ar_type = decltype(mtx(0, 0) + mtx(0, 0));
+    static_assert(std::is_same<ArType, ar_type>::value,
+                  "Types must be equal!");
     // static_assert(std::is_same<ar_type, double>::value, "Type must be
     // double!!!");
     // expect vinfo.size[1] == 1
@@ -75,12 +86,16 @@ __global__ __launch_bounds__(block_size) void acc_gemv(MtxRange mtx, BRange b,
     const auto local_id = group.thread_rank();
 
     for (std::int64_t col = local_id; col < num_cols; col += block_size) {
-        local_result += mtx(row_idx, col) * b(col, 0);
+        local_result += mtx(row_idx, col) * x(col, 0);
     }
     shared[local_id] = local_result;
     reduce(group, shared);
     if (local_id == 0) {
-        res(row_idx, 0) = shared[local_id];
+        if (beta == ArType{0}) {
+            res(row_idx, 0) = alpha * shared[local_id];
+        } else {
+            res(row_idx, 0) = alpha * shared[local_id] + beta * res(row_idx, 0);
+        }
     }
 }
 
@@ -92,20 +107,20 @@ ValueType ceildiv(ValueType a, ValueType b) {
 }
 
 template <typename ValueType>
-void gemv(const matrix_info minfo, const ValueType *mtx,
-          const matrix_info vinfo, const ValueType *b, ValueType *res) {
+void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
+          const matrix_info vinfo, const ValueType *x, ValueType beta, ValueType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
     const dim3 grid(minfo.size[0], 1, 1);
 
     kernel::gemv<block_size, ValueType>
-        <<<grid, block>>>(minfo, mtx, vinfo, b, res);
+        <<<grid, block>>>(minfo, alpha, mtx, vinfo, x, beta, res);
 }
 
 template <typename ArType, typename StType>
-void acc_gemv(const matrix_info minfo, const StType *mtx,
-              const matrix_info vinfo, const StType *b, StType *res) {
+void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
+              const matrix_info vinfo, const StType *x, ArType beta, StType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
@@ -121,10 +136,10 @@ void acc_gemv(const matrix_info minfo, const StType *mtx,
     using range = gko::acc::range<accessor>;
     using c_range = gko::acc::range<typename accessor::const_accessor>;
     auto m_acc = c_range(minfo.size, mtx, m_stride);
-    auto b_acc = c_range(vinfo.size, b, v_stride);
+    auto b_acc = c_range(vinfo.size, x, v_stride);
     auto res_acc = range(vinfo.size, res, v_stride);
 
-    kernel::acc_gemv<block_size><<<grid, block>>>(m_acc, b_acc, res_acc);
+    kernel::acc_gemv<block_size><<<grid, block>>>(alpha, m_acc, b_acc, beta, res_acc);
 }
 
 #define BIND_CUBLAS_GEMM(ValueType, CublasName)                                \
@@ -150,28 +165,28 @@ BIND_CUBLAS_GEMM(float, cublasSgemm)
     }
 BIND_CUBLAS_GEMV(double, cublasDgemv)
 BIND_CUBLAS_GEMV(float, cublasSgemv)
-#undef BIND_CUBLAS_GEMM
+#undef BIND_CUBLAS_GEMV
 
 template <typename ValueType>
 void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
-                 const ValueType *mtx, const matrix_info vinfo,
-                 const ValueType *b, ValueType *res) {
+                 ValueType alpha, const ValueType *mtx, const matrix_info vinfo,
+                 const ValueType *x, ValueType beta, ValueType *y) {
     // Note: CUBLAS expects the matrices to be stored in column major,
     //       so the sizes will be transposed for the cublas call
-    auto alpha = ValueType{1};
-    auto beta = ValueType{0};
+    // auto alpha = ValueType{1};
+    // auto beta = ValueType{0};
     //*
     cublas_gemv(handle, CUBLAS_OP_T, static_cast<int>(minfo.size[0]),
                 static_cast<int>(minfo.size[1]), &alpha, mtx,
-                static_cast<int>(minfo.stride), b,
-                static_cast<int>(vinfo.stride), &beta, res,
+                static_cast<int>(minfo.stride), x,
+                static_cast<int>(vinfo.stride), &beta, y,
                 static_cast<int>(vinfo.stride));
     /*/
     cublas_gemm(
         handle, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(vinfo.size[1]),
         static_cast<int>(vinfo.size[0]), static_cast<int>(minfo.size[1]),
-        &alpha, b, vinfo.stride, mtx, static_cast<int>(minfo.stride), &beta,
-        res, static_cast<int>(vinfo.stride));
+        &alpha, x, vinfo.stride, mtx, static_cast<int>(minfo.stride), &beta,
+        y, static_cast<int>(vinfo.stride));
     //*/
 }
 
