@@ -6,6 +6,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_pdf import PdfPages
 
 
+# TODO adjust FLOP computation to consider alpha and beta comps
 plot_folder = "./plots/"
 
 
@@ -15,7 +16,9 @@ h_dict = {
         #"GOPS": "[GOPs/s]", # Old value, changed to `[GOP/s]`
         "double": "GEMV double",
         "float": "GEMV float",
-        "acc": "GEMV Acc<fp32, fp64>",
+        "acc": "GEMV Acc<fp64, fp32>",
+        "cublasD": "CUBLAS GEMV fp64",
+        "cublasS": "CUBLAS GEMV fp32",
         }
 
 def read_csv(path=None):
@@ -54,13 +57,13 @@ def read_csv(path=None):
 
 ############################### Actual Plotting ###############################
 ### Color definition
-myblue    = (0, 0.4470, 0.7410);
+myblue    = (0, 0.4470, 0.7410); # acc
 myorange  = (0.8500, 0.3250, 0.0980);
 myyellow  = (0.9290, 0.6940, 0.1250);
 mymagenta = (0.4940, 0.1840, 0.5560);
-mygreen   = (0.4660, 0.6740, 0.1880);
+mygreen   = (0.4660, 0.6740, 0.1880); # sp
 mycyan    = (0.3010, 0.7450, 0.9330);
-myred     = (0.6350, 0.0780, 0.1840);
+myred     = (0.6350, 0.0780, 0.1840); # dp
 myblack   = (0.2500, 0.2500, 0.2500);
 mybrown   = (0.6500, 0.1600, 0.1600);
 
@@ -139,7 +142,8 @@ if __name__ == "__main__":
     if not os.path.exists(plot_folder):
         os.makedirs(plot_folder)
 
-    data, i_dict = read_csv("./v100_gemv.csv")
+    #data, i_dict = read_csv("./v100_gemv.csv")
+    data, i_dict = read_csv("./20210428_1830_v100_gemv.csv")
 
     # Generate data for plotting for all available precisions
     plot_data = {}
@@ -150,6 +154,8 @@ if __name__ == "__main__":
     double_flop = []
     float_flop = []
     acc_flop = []
+    cD_flop = []
+    cS_flop = []
     for line in data:
         if (len(line) < 2):
             break;
@@ -157,12 +163,16 @@ if __name__ == "__main__":
         dbl = float(line[i_dict["double"]])
         flt = float(line[i_dict["float"]])
         acc = float(line[i_dict["acc"]])
+        cubD = float(line[i_dict["cublasD"]])
+        cubS = float(line[i_dict["cublasS"]])
 
         mflops = rows * rows / (1000 * 1000)
         num_rows.append(rows)
         double_flop.append(mflops / dbl)
         float_flop.append(mflops / flt)
         acc_flop.append(mflops / acc)
+        cD_flop.append(mflops / cubD)
+        cS_flop.append(mflops / cubS)
 
     fig, ax = create_fig_ax()
 
@@ -176,6 +186,12 @@ if __name__ == "__main__":
             markersize=MarkerSize)
     ax.plot(num_rows, acc_flop, label="GEMV Accessor<fp64, fp32>",
             marker='', color=myblue, linewidth=LineWidth,
+            markersize=MarkerSize)
+    ax.plot(num_rows, cD_flop, label="CuBLAS GEMV fp64",
+            marker='', color=myorange, linewidth=LineWidth,
+            markersize=MarkerSize)
+    ax.plot(num_rows, cS_flop, label="CuBLAS GEMV fp32",
+            marker='', color=mymagenta, linewidth=LineWidth,
             markersize=MarkerSize)
     #ax.legend(loc="best")
     ax.legend(loc="lower right")
