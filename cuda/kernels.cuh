@@ -68,8 +68,7 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
                                                        ArType beta,
                                                        ResRange res) {
     using ar_type = decltype(mtx(0, 0) + mtx(0, 0));
-    static_assert(std::is_same<ArType, ar_type>::value,
-                  "Types must be equal!");
+    static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
     // static_assert(std::is_same<ar_type, double>::value, "Type must be
     // double!!!");
     // expect vinfo.size[1] == 1
@@ -108,7 +107,8 @@ ValueType ceildiv(ValueType a, ValueType b) {
 
 template <typename ValueType>
 void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
-          const matrix_info vinfo, const ValueType *x, ValueType beta, ValueType *res) {
+          const matrix_info vinfo, const ValueType *x, ValueType beta,
+          ValueType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
@@ -120,7 +120,8 @@ void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
 
 template <typename ArType, typename StType>
 void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
-              const matrix_info vinfo, const StType *x, ArType beta, StType *res) {
+              const matrix_info vinfo, const StType *x, ArType beta,
+              StType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
@@ -139,7 +140,8 @@ void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
     auto b_acc = c_range(vinfo.size, x, v_stride);
     auto res_acc = range(vinfo.size, res, v_stride);
 
-    kernel::acc_gemv<block_size><<<grid, block>>>(alpha, m_acc, b_acc, beta, res_acc);
+    kernel::acc_gemv<block_size>
+        <<<grid, block>>>(alpha, m_acc, b_acc, beta, res_acc);
 }
 
 #define BIND_CUBLAS_GEMM(ValueType, CublasName)                                \
