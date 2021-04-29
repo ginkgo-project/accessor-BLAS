@@ -63,11 +63,8 @@ std::vector<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
 }
 
 template <typename ResultType, typename InputType, typename Callable>
-void convert_mtx(const matrix_info &info, const std::vector<InputType> &input,
-                 std::vector<ResultType> &output, Callable convert) {
-    if (output.size() < info.get_1d_size()) {
-        throw "Error";
-    }
+void convert_mtx(const matrix_info &info, const InputType *input,
+                 ResultType *output, Callable convert) {
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
@@ -77,7 +74,7 @@ void convert_mtx(const matrix_info &info, const std::vector<InputType> &input,
 }
 
 template <typename ValueType>
-void print_mtx(const matrix_info &info, const std::vector<ValueType> &vec) {
+void print_mtx(const matrix_info &info, const ValueType *vec) {
     for (std::size_t i = 0; i < info.size[0]; ++i) {
         for (std::size_t j = 0; j < info.size[1]; ++j) {
             const auto idx = i * info.stride + j;
@@ -103,6 +100,8 @@ class GpuMemory {
     ~GpuMemory() { cudaFree(data_); }
 
     ValueType *data() { return data_; }
+    const ValueType *data_const() const { return data_; }
+    const ValueType *data() const { return data_; }
 
     void re_allocate() {
         CUDA_CALL(cudaFree(data_));
@@ -116,17 +115,20 @@ class GpuMemory {
         CUDA_CALL(cudaMemcpy(data_, vec.data(), vec.size() * sizeof(ValueType),
                              cudaMemcpyHostToDevice));
     }
+    
+    void copy_from(const ValueType *other_data, std::size_t num_elems) {
+        if (num_elems > num_elems_) {
+            throw "Error";
+        }
+        CUDA_CALL(cudaMemcpy(data_, other_data, num_elems * sizeof(ValueType),
+                             cudaMemcpyHostToDevice));
+    }
+
 
     std::size_t get_num_elems() const { return num_elems_; }
 
     std::size_t get_byte_size() const { return size_; }
 
-    std::vector<ValueType> get_vector() const {
-        std::vector<ValueType> vec(num_elems_);
-        CUDA_CALL(cudaMemcpy(vec.data(), data_, num_elems_ * sizeof(ValueType),
-                             cudaMemcpyDeviceToHost));
-        return vec;
-    }
     void get_vector(std::vector<ValueType> &vec) const {
         if (vec.size() > num_elems_) {
             throw "Error!!";

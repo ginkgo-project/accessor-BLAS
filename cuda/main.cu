@@ -158,11 +158,11 @@ class GemvMemory {
           gpu_mtx_(m_info_.get_1d_size()),
           gpu_x_(x_info_.get_1d_size()),
           gpu_res_(res_info_.get_1d_size()) {
-        convert_mtx(m_info_, other.cpu_mtx_, cpu_mtx_,
+        convert_mtx(m_info_, other.cpu_mtx_const(), cpu_mtx(),
                     [](OtherType v) { return static_cast<ValueType>(v); });
-        convert_mtx(x_info_, other.cpu_x_, cpu_x_,
+        convert_mtx(x_info_, other.cpu_x_const(), cpu_x(),
                     [](OtherType v) { return static_cast<ValueType>(v); });
-        convert_mtx(res_info_, other.cpu_res_, cpu_res_,
+        convert_mtx(res_info_, other.cpu_res_const(), cpu_res(),
                     [](OtherType v) { return static_cast<ValueType>(v); });
         gpu_mtx_.copy_from(cpu_mtx_);
         gpu_x_.copy_from(cpu_x_);
@@ -172,16 +172,28 @@ class GemvMemory {
     ValueType *cpu_mtx() { return cpu_mtx_.data(); }
     ValueType *cpu_x() { return cpu_x_.data(); }
     ValueType *cpu_res() { return cpu_res_.data(); }
+    const ValueType *cpu_mtx_const() const { return cpu_mtx_.data(); }
+    const ValueType *cpu_x_const() const { return cpu_x_.data(); }
+    const ValueType *cpu_res_const() const { return cpu_res_.data(); }
+    const ValueType *cpu_mtx() const { return cpu_mtx_.data(); }
+    const ValueType *cpu_x() const { return cpu_x_.data(); }
+    const ValueType *cpu_res() const { return cpu_res_.data(); }
 
     ValueType *gpu_mtx() { return gpu_mtx_.data(); }
     ValueType *gpu_x() { return gpu_x_.data(); }
     ValueType *gpu_res() { return gpu_res_.data(); }
+    const ValueType *gpu_mtx_const() const { return gpu_mtx_.data(); }
+    const ValueType *gpu_x_const() const { return gpu_x_.data(); }
+    const ValueType *gpu_res_const() const { return gpu_res_.data(); }
+    const ValueType *gpu_mtx() const { return gpu_mtx_.data(); }
+    const ValueType *gpu_x() const { return gpu_x_.data(); }
+    const ValueType *gpu_res() const { return gpu_res_.data(); }
 
     const matrix_info m_info_;
     const matrix_info x_info_;
     const matrix_info res_info_;
 
-   //private:
+   private:
     std::vector<ValueType> cpu_mtx_;
     std::vector<ValueType> cpu_x_;
     std::vector<ValueType> cpu_res_;
@@ -303,33 +315,33 @@ int main() {
 
         double ar_time{};
         auto ar_func = [&]() {
-            gemv(m_info, ar_alpha, ar_data.gpu_mtx(), x_info, ar_data.gpu_x(),
+            gemv(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(),
                  ar_beta, ar_data.gpu_res());
         };
         double st_time{};
         auto st_func = [&]() {
-            gemv(m_info, st_alpha, st_data.gpu_mtx(), x_info, st_data.gpu_x(),
+            gemv(m_info, st_alpha, st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(),
                  st_beta, st_data.gpu_res());
         };
         double acc_ar_time{};
         auto acc_ar_func = [&]() {
-            acc_gemv<ar_type>(m_info, ar_alpha, ar_data.gpu_mtx(), x_info,
-                              ar_data.gpu_x(), ar_beta, ar_data.gpu_res());
+            acc_gemv<ar_type>(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
+                              ar_data.gpu_x_const(), ar_beta, ar_data.gpu_res());
         };
         double acc_mix_time{};
         auto acc_mix_func = [&]() {
-            acc_gemv<ar_type>(m_info, ar_alpha, st_data.gpu_mtx(), x_info,
-                              st_data.gpu_x(), ar_beta, st_data.gpu_res());
+            acc_gemv<ar_type>(m_info, ar_alpha, st_data.gpu_mtx_const(), x_info,
+                              st_data.gpu_x_const(), ar_beta, st_data.gpu_res());
         };
         double cublas_ar_time{};
         auto cublas_ar_func = [&]() {
-            cublas_gemv(cublasHandle.get(), m_info, ar_alpha, ar_data.gpu_mtx(),
-                        x_info, ar_data.gpu_x(), ar_beta, ar_data.gpu_res());
+            cublas_gemv(cublasHandle.get(), m_info, ar_alpha, ar_data.gpu_mtx_const(),
+                        x_info, ar_data.gpu_x_const(), ar_beta, ar_data.gpu_res());
         };
         double cublas_st_time{};
         auto cublas_st_func = [&]() {
-            cublas_gemv(cublasHandle.get(), m_info, st_alpha, st_data.gpu_mtx(),
-                        x_info, st_data.gpu_x(), st_beta, st_data.gpu_res());
+            cublas_gemv(cublasHandle.get(), m_info, st_alpha, st_data.gpu_mtx_const(),
+                        x_info, st_data.gpu_x_const(), st_beta, st_data.gpu_res());
         };
         // ar_type d_error{};
         [[gnu::unused, maybe_unused]] value_type st_error{};
