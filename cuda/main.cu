@@ -225,39 +225,40 @@ int main(int argc, char **argv) {
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
         const matrix_info m_info{{num_rows, num_rows}};
         const matrix_info x_info{{num_rows, 1}};
+        const matrix_info res_info{{num_rows, 1}};
 
         double ar_time{};
         auto ar_func = [&]() {
             gemv(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
-                 ar_data.gpu_x_const(), ar_beta, ar_data.gpu_res());
+                 ar_data.gpu_x_const(), res_info, ar_beta, ar_data.gpu_res());
         };
         double st_time{};
         auto st_func = [&]() {
             gemv(m_info, st_alpha, st_data.gpu_mtx_const(), x_info,
-                 st_data.gpu_x_const(), st_beta, st_data.gpu_res());
+                 st_data.gpu_x_const(), res_info, st_beta, st_data.gpu_res());
         };
         double acc_ar_time{};
         auto acc_ar_func = [&]() {
             acc_gemv<ar_type>(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
-                              ar_data.gpu_x_const(), ar_beta,
+                              ar_data.gpu_x_const(), res_info, ar_beta,
                               ar_data.gpu_res());
         };
         double acc_mix_time{};
         auto acc_mix_func = [&]() {
             acc_gemv<ar_type>(m_info, ar_alpha, st_data.gpu_mtx_const(), x_info,
-                              st_data.gpu_x_const(), ar_beta,
+                              st_data.gpu_x_const(), res_info, ar_beta,
                               st_data.gpu_res());
         };
         double cublas_ar_time{};
         auto cublas_ar_func = [&]() {
             cublas_gemv(cublasHandle.get(), m_info, ar_alpha,
-                        ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(),
+                        ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(), res_info,
                         ar_beta, ar_data.gpu_res());
         };
         double cublas_st_time{};
         auto cublas_st_func = [&]() {
             cublas_gemv(cublasHandle.get(), m_info, st_alpha,
-                        st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(),
+                        st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(), res_info,
                         st_beta, st_data.gpu_res());
         };
         value_type ar_error{};  // [[gnu::unused, maybe_unused]]
@@ -275,7 +276,7 @@ int main(int argc, char **argv) {
             cpu_res_ref = ar_data.gpu_res_memory();
             if (normalize_error) {
                 res_ref_norm = reduce<value_type>(
-                    x_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
+                    res_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
                         return std::abs(a) + std::abs(b);
                     });
                 // copy again since reduce overwrites
