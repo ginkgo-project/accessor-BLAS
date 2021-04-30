@@ -13,13 +13,28 @@ namespace kernel {
 
 namespace cg = cooperative_groups;
 
-template <typename Group, typename ValueType>
-__device__ void reduce(Group &&group, ValueType *__restrict__ shared) {
+template <typename Group, typename ValueType, typename Callable>
+__device__ void reduce(Group &&group, ValueType *__restrict__ shared,
+                       Callable &&reduce_op) {
     const auto local_id = group.thread_rank();
-    for (auto i = group.size() / 2; i >= 1; i /= 2) {
+    constexpr int warp_size = 32;
+    for (auto i = group.size() / 2; i >= warp_size; i /= 2) {
         group.sync();
         if (local_id < i) {
-            shared[local_id] = shared[local_id] + shared[local_id + i];
+            shared[local_id] =
+                reduce_op(shared[local_id], shared[local_id + i]);
+        }
+    }
+    auto warp = cg::tiled_partition<warp_size>(group);
+    if (local_id < warp_size) {
+        auto local_data = shared[local_id];
+#pragma unroll
+        for (std::int32_t bitmask = 1; bitmask < warp.size(); bitmask <<= 1) {
+            const auto remote_data = warp.shfl_xor(local_data, bitmask);
+            local_data = reduce_op(local_data, remote_data);
+        }
+        if (warp.thread_rank() == 0) {
+            shared[0] = local_data;
         }
     }
 }
@@ -27,8 +42,8 @@ __device__ void reduce(Group &&group, ValueType *__restrict__ shared) {
 template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void gemv(
     const matrix_info minfo, ValueType alpha, const ValueType *__restrict__ mtx,
-    const matrix_info x_info, const ValueType *__restrict__ x, const matrix_info res_info, ValueType beta,
-    ValueType *__restrict__ res) {
+    const matrix_info x_info, const ValueType *__restrict__ x,
+    const matrix_info res_info, ValueType beta, ValueType *__restrict__ res) {
     // expect x_info.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
     if (row_idx > minfo.size[0]) {
@@ -48,7 +63,7 @@ __global__ __launch_bounds__(block_size) void gemv(
         local_result += mtx_val * b_val;
     }
     shared[local_id] = local_result;
-    reduce(group, shared);
+    reduce(group, shared, [](ValueType a, ValueType b) { return a + b; });
     if (local_id == 0) {
         const auto res_idx = row_idx * res_info.stride;
         if (beta == ValueType{0}) {
@@ -86,7 +101,7 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
         local_result += mtx(row_idx, col) * x(col, 0);
     }
     shared[local_id] = local_result;
-    reduce(group, shared);
+    reduce(group, shared, [](ar_type a, ar_type b) { return a + b; });
     if (local_id == 0) {
         if (beta == ArType{0}) {
             res(row_idx, 0) = alpha * shared[local_id];
@@ -105,8 +120,8 @@ ValueType ceildiv(ValueType a, ValueType b) {
 
 template <typename ValueType>
 void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
-          const matrix_info x_info, const ValueType *x, const matrix_info res_info, ValueType beta,
-          ValueType *res) {
+          const matrix_info x_info, const ValueType *x,
+          const matrix_info res_info, ValueType beta, ValueType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
@@ -118,8 +133,8 @@ void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
 
 template <typename ArType, typename StType>
 void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
-              const matrix_info x_info, const StType *x, const matrix_info res_info, ArType beta,
-              StType *res) {
+              const matrix_info x_info, const StType *x,
+              const matrix_info res_info, ArType beta, StType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
@@ -170,8 +185,9 @@ BIND_CUBLAS_GEMV(float, cublasSgemv)
 
 template <typename ValueType>
 void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
-                 ValueType alpha, const ValueType *mtx, const matrix_info x_info,
-                 const ValueType *x, const matrix_info res_info, ValueType beta, ValueType *y) {
+                 ValueType alpha, const ValueType *mtx,
+                 const matrix_info x_info, const ValueType *x,
+                 const matrix_info res_info, ValueType beta, ValueType *y) {
     // Note: CUBLAS expects the matrices to be stored in column major,
     //       so the sizes will be transposed for the cublas call
     // auto alpha = ValueType{1};
