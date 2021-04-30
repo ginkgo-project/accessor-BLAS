@@ -205,13 +205,13 @@ int main(int argc, char **argv) {
     };
 
     if (!measure_error) {
-        std::cout << "Num Rows" << DELIM << "GEMV double" << DELIM
-                  << "GEMV float" << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
+        std::cout << "Num Rows" << DELIM << "GEMV fp64" << DELIM
+                  << "GEMV fp32" << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
                   << "GEMV Acc<fp64, fp32>" << DELIM << "CUBLAS GEMV fp64"
                   << DELIM << "CUBLAS GEMV fp32" << '\n';
     } else {
-        std::cout << "Num Rows" << DELIM << "Error GEMV double" << DELIM
-                  << "Error GEMV float" << DELIM << "Error GEMV Acc<fp64, fp64>"
+        std::cout << "Num Rows" << DELIM << "Error GEMV fp64" << DELIM
+                  << "Error GEMV fp32" << DELIM << "Error GEMV Acc<fp64, fp64>"
                   << DELIM << "Error GEMV Acc<fp64, fp32>" << DELIM
                   << "Error CUBLAS GEMV fp64" << DELIM
                   << "Error CUBLAS GEMV fp32" << '\n';
