@@ -6,25 +6,13 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-csv_files = ("./results/20210430_0600_v100_gemv_ab1_flops.csv",
-             "./results/20210430_0600_v100_gemv_ab1_error.csv")
-"""
-csv_files = ("./results/20210430_0630_v100_gemv_a1b0_flops.csv",
-             "./results/20210430_0630_v100_gemv_a1b0_error.csv")
-"""
-
-# TODO adjust FLOP computation to consider alpha and beta comps
-def compute_flop(num_rows):
-    return num_rows * (num_rows + 3) # with alpha and beta
-    #return num_rows * num_rows # without alpha and beta
-
 
 plot_folder = "./plots/"
 
 
 ### dictionary to match purpose to CSV header
-h_dict_runtime = {
-        "rows" : "Num Rows",
+h_dict_gemv_runtime = {
+        "size" : "Num Rows",
         "fp64": "GEMV fp64",
         "fp32": "GEMV fp32",
         "acc_mix": "GEMV Acc<fp64, fp32>",
@@ -32,13 +20,31 @@ h_dict_runtime = {
         "cublas_fp32": "CUBLAS GEMV fp32",
         }
 
-h_dict_error = {
-        "rows" : "Num Rows",
+h_dict_gemv_error = {
+        "size" : "Num Rows",
         "fp64": "Error GEMV fp64",
         "fp32": "Error GEMV fp32",
         "acc_mix": "Error GEMV Acc<fp64, fp32>",
         "cublas_fp64": "Error CUBLAS GEMV fp64",
         "cublas_fp32": "Error CUBLAS GEMV fp32",
+        }
+
+h_dict_dot_runtime = {
+        "size" : "Vector Size",
+        "fp64": "DOT fp64",
+        "fp32": "DOT fp32",
+        "acc_mix": "DOT Acc<fp64, fp32>",
+        "cublas_fp64": "CUBLAS DOT fp64",
+        "cublas_fp32": "CUBLAS DOT fp32",
+        }
+
+h_dict_dot_error = {
+        "size" : "Vector Size",
+        "fp64": "Error DOT fp64",
+        "fp32": "Error DOT fp32",
+        "acc_mix": "Error DOT Acc<fp64, fp32>",
+        "cublas_fp64": "Error CUBLAS DOT fp64",
+        "cublas_fp32": "Error CUBLAS DOT fp32",
         }
 
 def read_csv(h_dict, path=None):
@@ -99,39 +105,103 @@ MarkerSize = 8
 plot_order_flops = ["fp64", "fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
 plot_order_error = ["fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
 
-plot_dict = {
+plot_detail_dict = {
     "fp64": {
-        "label": "GEMV fp64",
+        "label": "fp64",
         "color": myred,
-        "flops": [],
-        "error": [],
         },
     "fp32": {
-        "label": "GEMV fp32",
+        "label": "fp32",
         "color": mygreen,
-        "flops": [],
-        "error": [],
         },
     "acc_mix": {
-        "label": "GEMV Accessor<fp64, fp32>",
+        "label": "Accessor<fp64, fp32>",
         "color": myblue,
-        "flops": [],
-        "error": [],
         },
     "cublas_fp64": {
-        "label": "GEMV CuBLAS fp64",
+        "label": "CuBLAS fp64",
         "color": myorange,
-        "flops": [],
-        "error": [],
         },
     "cublas_fp32": {
-        "label": "GEMV CuBLAS fp32",
+        "label": "CuBLAS fp32",
         "color": mymagenta,
-        "flops": [],
-        "error": [],
         },
     }
 
+csv_files = ("./results/20210430_0600_v100_gemv_ab1_flops.csv",
+             "./results/20210430_0600_v100_gemv_ab1_error.csv")
+"""
+csv_files = ("./results/20210430_0630_v100_gemv_a1b0_flops.csv",
+             "./results/20210430_0630_v100_gemv_a1b0_error.csv")
+"""
+
+
+def gemv_compute_flop(size, time_ms):
+    flops = size * (size + 3) # with alpha and beta
+    #flops = size * size # without alpha and beta
+    Mflops = flops / (1000 * 1000)
+    return Mflops / time_ms
+
+def gemv_compute_error(size, error):
+    return error
+
+
+plot_dict_list = [
+        {
+            #"file": "./results/20210430_0600_v100_gemv_ab1_flops.csv",
+            "file": "./results/20210430_2000_v100_gemv_ab1_flops.csv",
+            "header_trans": h_dict_gemv_runtime,
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "gemv_flops",
+            "plot_prefix": "v100_",
+            "label_prefix": "GEMV ",
+            "conv_func": gemv_compute_flop,
+            "xlabel": "Number of rows",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+        },
+        {
+            #"file": "./results/20210430_0600_v100_gemv_ab1_error.csv",
+            "file": "./results/20210430_2000_v100_gemv_ab1_error.csv",
+            "header_trans": h_dict_gemv_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "gemv_error",
+            "plot_prefix": "v100_",
+            "label_prefix": "GEMV ",
+            "conv_func": gemv_compute_error,
+            "xlabel": "Number of rows",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
+            "file": "./results/20210430_2000_v100_dot.csv",
+            "header_trans": h_dict_dot_runtime,
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "dot_flops",
+            "plot_prefix": "v100_",
+            "label_prefix": "DOT ",
+            "conv_func": lambda size, time_ms: ((2*size - 1) / (1000 * 1000)) / time_ms,
+            "xlabel": "Vector size",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+        },
+        {
+            "file": "./results/20210430_2000_v100_dot.csv",
+            "header_trans": h_dict_dot_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "dot_error",
+            "plot_prefix": "v100_",
+            "label_prefix": "DOT ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Vector size",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+    ]
 
 
 def create_fig_ax():
@@ -173,63 +243,34 @@ if __name__ == "__main__":
     if not os.path.exists(plot_folder):
         os.makedirs(plot_folder)
 
-    ### Plot FLOPs
-    data, i_dict = read_csv(h_dict_runtime, csv_files[0])
+    for plot_info in plot_dict_list:
+        data, i_dict = read_csv(plot_info["header_trans"], plot_info["file"])
 
-    num_rows = []
-    
-    for line in data:
-        if (len(line) < 2):
-            break;
-        rows = int(line[i_dict["rows"]])
-        num_rows.append(rows)
-        mflops = compute_flop(rows) / (1000 * 1000)
+        plot_data = {}
+        plot_data["size"] = []
         
-        for name, info_dict in plot_dict.items():
-            time_ms = float(line[i_dict[name]])
-            info_dict["flops"].append(mflops / time_ms)
+        for line in data:
+            if (len(line) < 2):
+                break;
+            cur_size = int(line[i_dict["size"]])
+            plot_data["size"].append(cur_size)
+            
+            for name, info_dict in plot_info["plot_detail"].items():
+                data = float(line[i_dict[name]])
+                if name not in plot_data:
+                    plot_data[name] = []
+                plot_data[name].append(plot_info["conv_func"](cur_size, data))
 
-    fig, ax = create_fig_ax()
+        fig, ax = create_fig_ax()
+        ax.set_yscale(plot_info["yscale"])
 
-    ax.set_xlabel("Number of rows")
-    ax.set_ylabel("GFLOP/s")
-    for name in plot_order_flops:
-        info = plot_dict[name]
-        ax.plot(num_rows, info["flops"], label=info["label"],
-                marker='', color=info["color"], linewidth=LineWidth,
-                markersize=MarkerSize)
-    #ax.legend(loc="best")
-    ax.legend(loc="lower right")
-    plot_figure(fig, "gemv_flops", "v100_")
-    
-    ### Plot Error
-    data, i_dict = read_csv(h_dict_error, csv_files[1])
-
-    num_rows = []
-    
-    for line in data:
-        if (len(line) < 2):
-            break;
-        rows = int(line[i_dict["rows"]])
-        num_rows.append(rows)
-        
-        for name, info_dict in plot_dict.items():
-            error = float(line[i_dict[name]])
-            info_dict["error"].append(error)
-
-    fig, ax = create_fig_ax()
-    ax.set_yscale('log')
-
-    ax.set_xlabel("Number of rows")
-    ax.set_ylabel("Relative error")
-    for name in plot_order_error:
-        info = plot_dict[name]
-        ax.plot(num_rows, info["error"], label=info["label"],
-                marker='', color=info["color"], linewidth=LineWidth,
-                markersize=MarkerSize)
-    #ax.legend(loc="best")
-    ax.legend(loc="lower right")
-    plot_figure(fig, "gemv_error", "v100_")
-
-
-
+        ax.set_xlabel(plot_info["xlabel"])
+        ax.set_ylabel(plot_info["ylabel"])
+        for name in plot_info["plot_order"]:
+            info = plot_info["plot_detail"][name]
+            ax.plot(plot_data["size"], plot_data[name], label=plot_info["label_prefix"]+info["label"],
+                    marker='', color=info["color"], linewidth=LineWidth,
+                    markersize=MarkerSize)
+        ax.legend(loc="best")
+        #ax.legend(loc="lower right")
+        plot_figure(fig, plot_info["plot_name"], plot_info["plot_prefix"])
