@@ -31,39 +31,45 @@ function(example_apply_default_target_settings target)
 endfunction()
 
 
-if (ACCESSOR_CUDA)
-    enable_language(CUDA)
-    find_library(CUBLAS cublas
-        HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
-    set(target "accessor_cuda")
+function(create_cuda_executable target cublas target_source)
+    #message(STATUS "Parameter: ${target} ${cublas} ${target_source}")
     add_executable("${target}")
     example_apply_default_target_settings("${target}")
-    target_compile_definitions("${target}" PRIVATE ACCESSOR_CUDA_CODE)
-
-    # Force the language to be CUDA (works, but the main.cu approach is cleaner)
+    # Force the language to be CUDA (works, but the *.cu approach is cleaner)
     # set_source_files_properties(main.cpp.inc PROPERTIES LANGUAGE CUDA)
+    
     target_sources("${target}" PRIVATE
-        cuda/main.cu
+        ${target_source}
         )
-
 
     #TODO maybe add the Ginkgo Architecture Selector in this project
     #     OR simply use `CUDA_ARCHITECTURES` to choose the fitting architecture
     target_compile_options("${target}" PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-        $<$<COMPILE_LANGUAGE:CUDA>:--gpu-architecture=compute_52>
+        # Need atomicAdd for double -> compute_60
+        $<$<COMPILE_LANGUAGE:CUDA>:--gpu-architecture=compute_60>
         $<$<COMPILE_LANGUAGE:CUDA>:--gpu-code=sm_70,sm_72,sm_75>
         #$<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_75,code=sm_75>
         #$<$<COMPILE_LANGUAGE:CUDA>: -gencode arch=compute_80,code=sm_80>
         # Make sure the cpp files are treated as cu files
         #$<$<COMPILE_LANGUAGE:CUDA>:-x cu>
         )
-    target_link_libraries("${target}" PRIVATE "${CUBLAS}")
+    target_link_libraries("${target}" PRIVATE "${cublas}")
 
-    target_include_directories("${target}" PRIVATE
-        "${GINKGO_DIR}"
+    #target_include_directories("${target}" PRIVATE
+    #    "${GINKGO_DIR}"
     # Include CUDA header directory in cpp files
-    #"${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}"
-        )
+    #"${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
+
+endfunction()
+
+if (ACCESSOR_CUDA)
+    enable_language(CUDA)
+    find_library(CUBLAS cublas
+        HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
+
+    create_cuda_executable("cuda_gemv" "${CUBLAS}" "cuda/gemv_benchmark.cu")
+    create_cuda_executable("cuda_dot" "${CUBLAS}" "cuda/dot_benchmark.cu")
+
 
 endif()

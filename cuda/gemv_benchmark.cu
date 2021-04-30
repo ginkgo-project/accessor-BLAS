@@ -9,32 +9,17 @@
 #include <type_traits>
 
 //#include "../error_tobias.hpp"
+#include "gemv_kernels.cuh"
 #include "gemv_memory.cuh"
-#include "kernels.cuh"
-#include "matrix_helper.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
 
-// TODO: finish error computation
-
-template <typename ValueType>
-void control_gemv(const matrix_info m_info, ValueType alpha,
-                  const ValueType *mtx, const matrix_info x_info,
-                  ValueType beta, const ValueType *x, ValueType *res) {
-    if (x_info.size[1] != 1) {
-        throw "Error!";
-    }
-    for (std::size_t row = 0; row < m_info.size[0]; ++row) {
-        ValueType local_res{0};
-        for (std::size_t col = 0; col < m_info.size[1]; ++col) {
-            const std::size_t midx = row * m_info.stride + col;
-            local_res += mtx[midx] * x[col * x_info.stride];
-        }
-        auto res_idx = row * x_info.stride;
-        res[res_idx] = beta * res[res_idx] + alpha * local_res;
-    }
-}
-
+/*
+Idea: Add big for-loop in gemv-kernel, so a change in the grid still covers
+      all elements. It also allows each thread to have multiple rows to process.
+      It might not be necessary, since each thread already has multiple elements
+      to read (the columns), but it is worth a try.
+*/
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
     std::size_t end = info.size[0];
@@ -92,34 +77,6 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
         info, tmp, [](ValueType o1, ValueType o2) { return o1 + o2; });
 }
 
-template <typename Callable>
-double benchmark_function(Callable func, bool skip = false) {
-    constexpr int bench_iters{10};
-    double time_ms[bench_iters];
-    CudaTimer ctimer;
-    // Warmup
-    func();
-    synchronize();
-    if (skip) {
-        return {};
-    }
-    for (int i = 0; i < bench_iters; ++i) {
-        ctimer.start();
-        func();
-        ctimer.stop();
-        time_ms[i] = ctimer.get_time();
-        ctimer.reset();
-    }
-
-    // Reduce timings to one value
-    double result_ms{std::numeric_limits<double>::max()};
-    for (int i = 0; i < bench_iters; ++i) {
-        result_ms = std::min(result_ms, time_ms[i]);
-    }
-    // result_ms /= static_cast<double>(bench_iters);
-    return bench_iters == 0 ? double{} : result_ms;
-}
-
 int main(int argc, char **argv) {
     /*
     using ar_type = error_number<double>;
@@ -166,7 +123,7 @@ int main(int argc, char **argv) {
         GemvMemory<ar_type>(max_rows, max_cols, mtx_dist, vector_dist, rengine);
     auto st_data = GemvMemory<st_type>(ar_data);
 
-    auto cublasHandle = get_cublas_handle();
+    auto cublasHandle = cublas_get_handle();
 
     static_assert(max_rows == max_cols, "Matrix must be square!");
 
@@ -205,8 +162,8 @@ int main(int argc, char **argv) {
     };
 
     if (!measure_error) {
-        std::cout << "Num Rows" << DELIM << "GEMV fp64" << DELIM
-                  << "GEMV fp32" << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
+        std::cout << "Num Rows" << DELIM << "GEMV fp64" << DELIM << "GEMV fp32"
+                  << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
                   << "GEMV Acc<fp64, fp32>" << DELIM << "CUBLAS GEMV fp64"
                   << DELIM << "CUBLAS GEMV fp32" << '\n';
     } else {
@@ -252,18 +209,18 @@ int main(int argc, char **argv) {
         double cublas_ar_time{};
         auto cublas_ar_func = [&]() {
             cublas_gemv(cublasHandle.get(), m_info, ar_alpha,
-                        ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(), res_info,
-                        ar_beta, ar_data.gpu_res());
+                        ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(),
+                        res_info, ar_beta, ar_data.gpu_res());
         };
         double cublas_st_time{};
         auto cublas_st_func = [&]() {
             cublas_gemv(cublasHandle.get(), m_info, st_alpha,
-                        st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(), res_info,
-                        st_beta, st_data.gpu_res());
+                        st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(),
+                        res_info, st_beta, st_data.gpu_res());
         };
         value_type ar_error{};  // [[gnu::unused, maybe_unused]]
         value_type st_error{};
-        ar_type acc_ar_error{};
+        value_type acc_ar_error{};
         value_type acc_mix_error{};
         value_type cublas_ar_error{};
         value_type cublas_st_error{};

@@ -42,6 +42,11 @@ struct matrix_info {
     std::size_t get_num_elems() const { return size[0] * size[1]; }
 };
 
+template <typename ValueType>
+ValueType ceildiv(ValueType a, ValueType b) {
+    return (a - 1) / b + 1;
+}
+
 ///////////// GPU relevant code \\\\\\\\\\\\\
 
 
@@ -93,7 +98,7 @@ class CudaTimer {
 using CublasContext = std::remove_pointer_t<cublasHandle_t>;
 
 std::unique_ptr<CublasContext, std::function<void(cublasHandle_t)>>
-get_cublas_handle() {
+cublas_get_handle() {
     cublasHandle_t handle;
     CUBLAS_CALL(cublasCreate(&handle));
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
@@ -101,4 +106,42 @@ get_cublas_handle() {
     return {handle,
             [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
 }
+
+void cublas_set_host_ptr_mode(cublasHandle_t handle) {
+    CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
+}
+
+void cublas_set_device_ptr_mode(cublasHandle_t handle) {
+    CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE));
+}
+
+
+template <typename Callable>
+double benchmark_function(Callable func, bool skip = false) {
+    constexpr int bench_iters{10};
+    double time_ms[bench_iters];
+    CudaTimer ctimer;
+    // Warmup
+    func();
+    synchronize();
+    if (skip) {
+        return {};
+    }
+    for (int i = 0; i < bench_iters; ++i) {
+        ctimer.start();
+        func();
+        ctimer.stop();
+        time_ms[i] = ctimer.get_time();
+        ctimer.reset();
+    }
+
+    // Reduce timings to one value
+    double result_ms{std::numeric_limits<double>::max()};
+    for (int i = 0; i < bench_iters; ++i) {
+        result_ms = std::min(result_ms, time_ms[i]);
+    }
+    // result_ms /= static_cast<double>(bench_iters);
+    return bench_iters == 0 ? double{} : result_ms;
+}
+
 
