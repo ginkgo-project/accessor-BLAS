@@ -10,8 +10,8 @@
 #include "kernel_utils.cuh"
 #include "utils.cuh"
 
-constexpr int grids_per_sm{4};
-constexpr int dot_block_size{512};
+constexpr int grids_per_sm{32};
+constexpr int dot_block_size{1024};
 
 namespace kernel {
 
