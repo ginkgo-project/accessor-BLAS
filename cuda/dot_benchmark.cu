@@ -54,9 +54,10 @@ int main(int argc, char **argv) {
         return std::abs(res - ref_res) / std::abs(ref_res);
         // return res;
     };
+    constexpr std::size_t steps = 64;
     constexpr auto start = max_size / 1024;
     // constexpr auto start = max_size / 16;
-    constexpr auto row_incr = start;
+    constexpr auto row_incr = (max_size - start) / steps;
     for (auto vec_size = start; vec_size <= max_size; vec_size += row_incr) {
         const matrix_info x_info{{vec_size, 1}};
         const matrix_info y_info{{vec_size, 1}};
