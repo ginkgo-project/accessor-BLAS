@@ -2,11 +2,9 @@
 
 #include <type_traits>
 
-
-#include "utils.cuh"
 #include "matrix_helper.cuh"
 #include "memory.cuh"
-
+#include "utils.cuh"
 
 template <typename ValueType>
 class GemvMemory {
@@ -49,7 +47,7 @@ class GemvMemory {
         gpu_x_.copy_from(cpu_x_);
         gpu_res_.copy_from(cpu_res_);
     }
-    
+
     void sync_result() { cpu_res_.copy_from(gpu_res_); }
 
    private:

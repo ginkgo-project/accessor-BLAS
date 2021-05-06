@@ -128,13 +128,6 @@ plot_detail_dict = {
         },
     }
 
-csv_files = ("./results/20210430_0600_v100_gemv_ab1_flops.csv",
-             "./results/20210430_0600_v100_gemv_ab1_error.csv")
-"""
-csv_files = ("./results/20210430_0630_v100_gemv_a1b0_flops.csv",
-             "./results/20210430_0630_v100_gemv_a1b0_error.csv")
-"""
-
 
 def gemv_compute_flop(size, time_ms):
     flops = size * (size + 3) # with alpha and beta
@@ -149,7 +142,8 @@ def gemv_compute_error(size, error):
 plot_dict_list = [
         {
             #"file": "./results/20210430_0600_v100_gemv_ab1_flops.csv",
-            "file": "./results/20210430_2000_v100_gemv_ab1_flops.csv",
+            #"file": "./results/20210430_2000_v100_gemv_ab1_flops.csv",
+            "file": "./results/20210505_1300_v100_gemv_ab1_flops.csv",
             "header_trans": h_dict_gemv_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -160,10 +154,13 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            #"xlim": {"left": None, "right": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
         },
         {
             #"file": "./results/20210430_0600_v100_gemv_ab1_error.csv",
-            "file": "./results/20210430_2000_v100_gemv_ab1_error.csv",
+            #"file": "./results/20210430_2000_v100_gemv_ab1_error.csv",
+            "file": "./results/20210505_1300_v100_gemv_ab1_error.csv",
             "header_trans": h_dict_gemv_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -176,7 +173,8 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
-            "file": "./results/20210430_2000_v100_dot.csv",
+            #"file": "./results/20210430_2000_v100_dot.csv",
+            "file": "./results/20210505_1300_v100_dot_32xSM.csv",
             "header_trans": h_dict_dot_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -187,9 +185,13 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "xlim": {"left": None, "right": None,},
+            "ylim": {"bottom": 0, "top": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
         },
         {
-            "file": "./results/20210430_2000_v100_dot.csv",
+            #"file": "./results/20210430_2000_v100_dot.csv",
+            "file": "./results/20210505_1300_v100_dot_32xSM.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -271,6 +273,10 @@ if __name__ == "__main__":
             ax.plot(plot_data["size"], plot_data[name], label=plot_info["label_prefix"]+info["label"],
                     marker='', color=info["color"], linewidth=LineWidth,
                     markersize=MarkerSize)
+        if "xlim" in plot_info:
+            ax.set_xlim(**plot_info["xlim"])
+        if "ylim" in plot_info:
+            ax.set_ylim(**plot_info["ylim"])
         ax.legend(loc="best")
         #ax.legend(loc="lower right")
         plot_figure(fig, plot_info["plot_name"], plot_info["plot_prefix"])

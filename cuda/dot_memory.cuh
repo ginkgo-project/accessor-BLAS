@@ -24,9 +24,7 @@ class DotMemory {
           gpu_y_(GPU_device, y_info_.get_1d_size()),
           gpu_res_(GPU_device, 1) {
         *cpu_res_.data() = ValueType{-999};
-        gpu_x_.copy_from(cpu_x_);
-        gpu_y_.copy_from(cpu_y_);
-        gpu_res_.copy_from(cpu_res_);
+        copy_cpu_to_gpu();
     }
     template <typename OtherType>
     DotMemory(const DotMemory<OtherType> &other)
@@ -41,14 +39,23 @@ class DotMemory {
         // Note: conversion must be adopted if `error_type` is used
         convert(other);
 
-        gpu_x_.copy_from(cpu_x_);
-        gpu_y_.copy_from(cpu_y_);
-        gpu_res_.copy_from(cpu_res_);
+        copy_cpu_to_gpu();
     }
 
     ValueType get_result() {
         cpu_res_.copy_from(gpu_res_);
         return *cpu_res_.data();
+    }
+    void copy_cpu_to_gpu() {
+        gpu_x_.copy_from(cpu_x_);
+        gpu_y_.copy_from(cpu_y_);
+        gpu_res_.copy_from(cpu_res_);
+    }
+
+    template <typename OtherType>
+    void convert_from(const DotMemory<OtherType> &other) {
+        convert(other);
+        copy_cpu_to_gpu();
     }
 
    private:
@@ -78,8 +85,9 @@ class DotMemory {
                     convert_function);
     }
 
-   protected:
-    // Non-const data access needed for conversions
+   public:
+    // Non-const data access needed for conversions and re-randomizing the
+    // vectors
     ValueType *cpu_x_nc() { return cpu_x_.data(); }
     ValueType *cpu_y_nc() { return cpu_y_.data(); }
     ValueType *cpu_res_nc() { return cpu_res_.data(); }

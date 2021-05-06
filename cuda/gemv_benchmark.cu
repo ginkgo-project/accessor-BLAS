@@ -112,11 +112,13 @@ int main(int argc, char **argv) {
     const bool normalize_error{true};
 
     constexpr std::size_t max_rows{24 * 1024};
+    // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     std::default_random_engine rengine(42);
-    std::uniform_real_distribution<value_type> mtx_dist(-2.0, 2.0);
+    std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
+    // std::uniform_real_distribution<value_type> mtx_dist(-10.0, 10.0);
     auto vector_dist = mtx_dist;
 
     auto ar_data =
