@@ -25,6 +25,17 @@ Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
     return res;
 }
 
+template <typename ValueType, typename ValueDist, typename Engine>
+void write_random(const matrix_info &info, ValueDist &&dist,
+                          Engine &&engine, ValueType *io) {
+    for (std::size_t row = 0; row < info.size[0]; ++row) {
+        for (std::size_t col = 0; col < info.size[1]; ++col) {
+            const std::size_t idx = row * info.stride + col;
+            io[idx] = dist(engine);
+        }
+    }
+}
+
 template <typename ResultType, typename InputType, typename Callable>
 void convert_mtx(const matrix_info &info, const InputType *input,
                  ResultType *output, Callable convert) {
