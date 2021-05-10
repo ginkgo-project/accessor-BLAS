@@ -3,24 +3,33 @@ project(accessor_example LANGUAGES CXX)
 
 option(ACCESSOR_CUDA "Build the CUDA benchmark" ON)
 
+set(GINKGO_DIR_INFO "Directory of Ginkgo (used for the accessor only)")
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Setting build type to 'Release' as none was specified.")
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
 set(GINKGO_DIR "" CACHE PATH
-    "Directory of Ginkgo")
+    "${GINKGO_DIR_INFO}")
 
 string(COMPARE EQUAL "${GINKGO_DIR}" "" empty_ginkgo_dir)
 # If directory not specified, try to find it. If not found, clone it locally
 if (empty_ginkgo_dir)
-    #find_package("Ginkgo")
-    #if (Ginkgo_FOUND)
-    #    message(STATUS "Using external version of package Ginkgo. In case of problems, consider setting the directory of Ginkgo manually with -DGINKGO_DIR=<directory/to/Ginkgo>.")
-    #else()
-    #endif()
     message(STATUS "GINKGO_DIR was not specified. Cloning Ginkgo into build directory...")
-    # TODO
+    find_package(Git REQUIRED)
+
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" clone --branch develop
+                    "https://github.com/ginkgo-project/ginkgo.git" "Ginkgo"
+        WORKING_DIRECTORY "${accessor_example_BINARY_DIR}"
+        RESULT_VARIABLE result
+        )
+    if(result)
+        message(FATAL_ERROR "Failed to clone Ginkgo repository. Error: ${result}")
+    endif()
+    set(GINKGO_DIR "${accessor_example_BINARY_DIR}/Ginkgo" CACHE PATH "${GINKGO_DIR_INFO}" FORCE)
+    message(STATUS "Ginkgo successfully cloned into \"${GINKGO_DIR}\"")
 endif()
 
 function(example_apply_default_target_settings target)
@@ -31,45 +40,6 @@ function(example_apply_default_target_settings target)
 endfunction()
 
 
-function(create_cuda_executable target cublas target_source)
-    #message(STATUS "Parameter: ${target} ${cublas} ${target_source}")
-    add_executable("${target}")
-    example_apply_default_target_settings("${target}")
-    # Force the language to be CUDA (works, but the *.cu approach is cleaner)
-    # set_source_files_properties(main.cpp.inc PROPERTIES LANGUAGE CUDA)
-    
-    target_sources("${target}" PRIVATE
-        ${target_source}
-        )
-
-    #TODO maybe add the Ginkgo Architecture Selector in this project
-    #     OR simply use `CUDA_ARCHITECTURES` to choose the fitting architecture
-    target_compile_options("${target}" PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-        # Need atomicAdd for double -> compute_60
-        $<$<COMPILE_LANGUAGE:CUDA>:--gpu-architecture=compute_60>
-        $<$<COMPILE_LANGUAGE:CUDA>:--gpu-code=sm_70,sm_72,sm_75>
-        #$<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_75,code=sm_75>
-        #$<$<COMPILE_LANGUAGE:CUDA>: -gencode arch=compute_80,code=sm_80>
-        # Make sure the cpp files are treated as cu files
-        #$<$<COMPILE_LANGUAGE:CUDA>:-x cu>
-        )
-    target_link_libraries("${target}" PRIVATE "${cublas}")
-
-    #target_include_directories("${target}" PRIVATE
-    #    "${GINKGO_DIR}"
-    # Include CUDA header directory in cpp files
-    #"${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
-
-endfunction()
-
 if (ACCESSOR_CUDA)
-    enable_language(CUDA)
-    find_library(CUBLAS cublas
-        HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
-
-    create_cuda_executable("cuda_gemv" "${CUBLAS}" "cuda/gemv_benchmark.cu")
-    create_cuda_executable("cuda_dot" "${CUBLAS}" "cuda/dot_benchmark.cu")
-
-
+    add_subdirectory(cuda)
 endif()
