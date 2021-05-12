@@ -6,7 +6,6 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-
 plot_folder = "./plots/"
 
 
@@ -99,7 +98,10 @@ mydarkgreen   = (0.4660 / dark_mod, 0.6740 / dark_mod, 0.1880 / dark_mod);
 mydarkblue    = (0, 0.4470 / dark_mod, 0.7410 / dark_mod);
 
 ### Other globals
-LineWidth = 3
+LabelFontSize = 15
+AxisTickSize = 12
+
+PlotLineWidth = 3
 MarkerSize = 8
 
 plot_order_flops = ["fp64", "fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
@@ -198,13 +200,57 @@ plot_dict_list = [
         {
             #"file": "./results/20210430_2000_v100_dot.csv",
             #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
+            "file": "./results/20210506_1800_v100_dot_0,1.csv",
+            "header_trans": h_dict_dot_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "dot_error_0,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "DOT ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Vector size",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
+            #"file": "./results/20210430_2000_v100_dot.csv",
+            #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
+            "file": "./results/20210506_1600_v100_dot_-1,1.csv",
+            #"file": "./results/20210506_1800_v100_dot_0,1.csv",
+            "header_trans": h_dict_dot_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "dot_error_-1,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "DOT ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Vector size",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
+            #"file": "./results/20210430_2000_v100_dot.csv",
+            #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
             #"file": "./results/20210506_1600_v100_dot_-1,1.csv",
             #"file": "./results/20210506_1800_v100_dot_0,1.csv",
             "file": "./results/20210506_1930_v100_dot_error_avg_-1,1.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
-            "plot_name": "dot_error",
+            "plot_name": "dot_error_avg_-1,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "DOT ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Vector size",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
+            "file": "./results/2021020210512_0843_v100_dot_error_avg_0,1.csv",
+            "header_trans": h_dict_dot_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "dot_error_avg_0,1",
             "plot_prefix": "v100_",
             "label_prefix": "DOT ",
             "conv_func": lambda sz, error: error,
@@ -275,17 +321,21 @@ if __name__ == "__main__":
         fig, ax = create_fig_ax()
         ax.set_yscale(plot_info["yscale"])
 
-        ax.set_xlabel(plot_info["xlabel"])
-        ax.set_ylabel(plot_info["ylabel"])
+        ax.set_xlabel(plot_info["xlabel"], fontsize=LabelFontSize)
+        ax.set_ylabel(plot_info["ylabel"], fontsize=LabelFontSize)
         for name in plot_info["plot_order"]:
             info = plot_info["plot_detail"][name]
             ax.plot(plot_data["size"], plot_data[name], label=plot_info["label_prefix"]+info["label"],
-                    marker='', color=info["color"], linewidth=LineWidth,
+                    marker='', color=info["color"], linewidth=PlotLineWidth,
                     markersize=MarkerSize)
         if "xlim" in plot_info:
             ax.set_xlim(**plot_info["xlim"])
         if "ylim" in plot_info:
             ax.set_ylim(**plot_info["ylim"])
-        ax.legend(loc="best")
+        
+        ax.tick_params(axis='x', labelsize=AxisTickSize)
+        ax.tick_params(axis='y', labelsize=AxisTickSize)
+        
+        ax.legend(loc="best", fontsize=LabelFontSize)
         #ax.legend(loc="lower right")
         plot_figure(fig, plot_info["plot_name"], plot_info["plot_prefix"])
