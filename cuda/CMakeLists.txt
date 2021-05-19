@@ -34,3 +34,4 @@ find_library(CUBLAS cublas
 
 create_cuda_executable("gemv_benchmark" "${CUBLAS}" "gemv_benchmark.cu")
 create_cuda_executable("dot_benchmark" "${CUBLAS}" "dot_benchmark.cu")
+create_cuda_executable("trsv_benchmark" "${CUBLAS}" "trsv_benchmark.cu")
