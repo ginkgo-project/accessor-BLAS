@@ -9,7 +9,6 @@
 #include <tuple>
 #include <type_traits>
 
-//#include "../error_tobias.hpp"
 #include "memory.cuh"
 #include "trsv_kernels.cuh"
 #include "trsv_memory.cuh"
@@ -102,12 +101,12 @@ int main(int argc, char **argv) {
     }
 
     // constexpr std::size_t max_rows{24 * 1024};
-    constexpr std::size_t max_rows{5000};
+    constexpr std::size_t max_rows{10000};
     // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
     
-    constexpr std::size_t start = max_rows - 10;//std::max(std::size_t{32}, max_rows / 50);  // max_rows / 48;
+    constexpr std::size_t start = max_rows;//std::max(std::size_t{32}, max_rows / 50);  // max_rows / 48;
     // constexpr auto start = max_rows / 48;
     constexpr std::size_t row_incr = 1; // start;
 
@@ -151,8 +150,8 @@ int main(int argc, char **argv) {
 
     // Setting up names and associated benchmark and error functions
 
-    constexpr std::size_t benchmark_num{4};
-    constexpr std::size_t benchmark_reference{3};
+    constexpr std::size_t benchmark_num{6};
+    constexpr std::size_t benchmark_reference{benchmark_num - 1};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::string, std::function<value_type(matrix_info)>>;
@@ -164,6 +163,13 @@ int main(int argc, char **argv) {
                                   ar_data.gpu_x());
                          },
                          "Error TRSV fp64", ar_compute_error},
+        benchmark_info_t{"TRSV fp32",
+                         [&](matrix_info m_info, matrix_info x_info) {
+                             trsv(m_info, t_matrix_type, d_matrix_type,
+                                  st_data.gpu_mtx_const(), x_info,
+                                  st_data.gpu_x());
+                         },
+                         "Error TRSV fp32", st_compute_error},
         benchmark_info_t{"CUBLAS TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
@@ -180,6 +186,13 @@ int main(int argc, char **argv) {
                                          st_data.gpu_x());
                          },
                          "Error CUBLAS TRSV fp32", st_compute_error},
+        benchmark_info_t{"TRSV_2 fp32",
+                         [&](matrix_info m_info, matrix_info x_info) {
+                             trsv_2(m_info, t_matrix_type, d_matrix_type,
+                                  st_data.gpu_mtx_const(), x_info,
+                                  st_data.gpu_x());
+                         },
+                         "Error TRSV_2 fp32", st_compute_error},
         benchmark_info_t{"Hand TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              control_trsv(m_info, t_matrix_type, d_matrix_type,
@@ -210,7 +223,8 @@ int main(int argc, char **argv) {
     std::cout << '\n';
 
     std::cout.precision(16);
-    std::cout << std::scientific;
+    // showpos: show + sign for positive numbers
+    std::cout << std::scientific << std::showpos;
 
     // std::vector<std::array<value_type, benchmark_num>>
 
