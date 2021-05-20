@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cuda.h>
 #include <cooperative_groups.h>
 
 #include <cinttypes>
@@ -9,11 +10,24 @@ namespace kernel {
 namespace cg = cooperative_groups;
 constexpr int WARP_SIZE{32};
 
-template <unsigned int subgroup_size, typename TileParentT, typename ValueType,
+
+// cg::thread_block_tile in CUDA >= 11 has an additional type argument,
+// which CUDA 10 and lower does not have.
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 1100
+
+template <unsigned int subgroup_size, typename ValueType,
+          typename Callable, typename ...TileParams>
+__device__ __forceinline__ ValueType
+reduce(const cg::thread_block_tile<subgroup_size, TileParams...> &warp,
+            ValueType local_data, Callable &&reduce_op) {
+#elif defined(CUDA_VERSION) && CUDA_VERSION < 1100
+
+template <unsigned int subgroup_size, typename ValueType,
           typename Callable>
 __device__ __forceinline__ ValueType
-reduce(const cg::thread_block_tile<subgroup_size, TileParentT> &warp,
+reduce(const cg::thread_block_tile<subgroup_size> &warp,
             ValueType local_data, Callable &&reduce_op) {
+#endif
     // assert: warp.size() == subgroup_size && subgroup_size power of 2
 #pragma unroll
     for (std::int32_t bitmask = 1; bitmask < subgroup_size; bitmask <<= 1) {
