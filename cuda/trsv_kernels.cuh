@@ -238,21 +238,23 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     //         blockDim.z = 1
     constexpr int triang_stride = swarp_size + 1;
 
-    __shared__ ValueType shared[swarp_size * triang_stride + 1];
-    auto triang = shared;
-    __shared__ std::uint32_t shared_bri[1];
+    //__shared__ ValueType shared[swarp_size * triang_stride];
+    __shared__ ValueType triang[swarp_size * triang_stride];
+    __shared__ std::uint32_t shared_row_block_idx[1];
     //= reinterpret_cast<std::uint32_t *>(
     //    triang_stride + swarp_size * triang_stride);
+    // correction value for x[block_col * swarp_size + threadIdx.x]
+    __shared__ ValueType x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_bri = atomicInc(idx_helper + 1, ~std::uint32_t{0});
+        *shared_row_block_idx = atomicInc(idx_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
-    const std::int64_t block_row_idx = 0; //*shared_bri;
-    //printf("(x, y): (%d, %d) ");
+    const std::int64_t row_block_idx = *shared_row_block_idx;
+    // printf("(x, y): (%d, %d) ");
 
-    if (block_row_idx * swarp_size >= m_info.size[0]) {
+    if (row_block_idx * swarp_size >= m_info.size[0]) {
         return;
     }
 
@@ -263,9 +265,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     for (int row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
         const auto col = threadIdx.x;
-        const std::int64_t global_row = block_row_idx * swarp_size + row;
-        const std::int64_t global_col =
-            block_row_idx * swarp_size + col;
+        const std::int64_t global_row = row_block_idx * swarp_size + row;
+        const std::int64_t global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
             (dmtx == dmtx_t::unit && col == row || row < col ||
              global_row >= m_info.size[0])
@@ -273,20 +274,57 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
                 : mtx[global_row * m_info.stride + global_col];
     }
     group.sync();
-    volatile std::uint32_t *col_helper = idx_helper;
-    // TODO: Implement GEMV here
-    //       potentially, cache current x into shared memory, so all threads
-    //       can work on cached x_values
+    // TODO maybe change type of idx_helper
+    volatile std::int32_t *last_finished_col =
+        reinterpret_cast<std::int32_t *>(idx_helper);
 
+    constexpr int num_local_rows = swarp_size / swarps_per_block;
+    ValueType local_row_result[num_local_rows] = {};
+    for (int col_block = 0; col_block < row_block_idx; ++col_block) {
+        const auto global_col = col_block * swarp_size + threadIdx.x;
+        // Wait until result is known for current column block
+        // Maybe add __nanosleep(200) to ensure it is yielded
+        if (threadIdx.x == 0 && threadIdx.y == 0) {
+            while (*last_finished_col < col_block) {
+            }
+        }
+        group.sync();
+        const auto x_cached = x[global_col * x_info.stride];
+#pragma unroll
+        for (int local_row_idx = 0; local_row_idx < num_local_rows;
+             ++local_row_idx) {
+            const auto global_row = row_block_idx * swarp_size +
+                                    local_row_idx * swarps_per_block +
+                                    threadIdx.y;
+            const std::int64_t mtx_idx =
+                global_row * m_info.stride + global_col;
+            local_row_result[local_row_idx] += x_cached * mtx[mtx_idx];
+        }
+    }
     const auto swarp = cg::tiled_partition<swarp_size>(group);
+    if (threadIdx.x == 0 && threadIdx.y == 0) {
+        for (int i = 0; i < swarp_size; ++i) {
+            x_correction[i] = 0;
+        }
+    }
+    group.sync();
+#pragma unroll
+    for (int local_row_idx = 0; local_row_idx < num_local_rows;
+         ++local_row_idx) {
+        x_correction[local_row_idx * swarps_per_block + threadIdx.y] =
+            reduce(swarp, local_row_result[local_row_idx],
+                   [](ValueType a, ValueType b) { return a + b; });
+    }
+    group.sync();
+
     // Solve triangular system
     if (threadIdx.y == 0) {
+        const auto row = threadIdx.x;
         const std::int64_t x_idx =
-            (block_row_idx + threadIdx.x) * x_info.stride;
-        auto local_solution = x[x_idx];
+            (row_block_idx * swarp_size + row) * x_info.stride;
+        auto local_solution = x[x_idx] - x_correction[row];
 
         for (int col = 0; col < swarp_size; ++col) {
-            const auto row = threadIdx.x;
             const auto mtx_val = triang[col * triang_stride + row];
             const auto current_x = swarp.shfl(local_solution / mtx_val, col);
             if (row == col) {
@@ -297,6 +335,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
             }
         }
         x[x_idx] = local_solution;
+        __threadfence();
+        if (threadIdx.x == 0) {
+            *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
+        }
     }
 }
 
