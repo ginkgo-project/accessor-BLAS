@@ -13,14 +13,14 @@ constexpr int WARP_SIZE{32};
 
 // cg::thread_block_tile in CUDA >= 11 has an additional type argument,
 // which CUDA 10 and lower does not have.
-#if defined(CUDA_VERSION) && CUDA_VERSION >= 1100
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 11000
 
 template <unsigned int subgroup_size, typename ValueType,
           typename Callable, typename ...TileParams>
 __device__ __forceinline__ ValueType
 reduce(const cg::thread_block_tile<subgroup_size, TileParams...> &warp,
             ValueType local_data, Callable &&reduce_op) {
-#elif defined(CUDA_VERSION) && CUDA_VERSION < 1100
+#elif defined(CUDA_VERSION) && CUDA_VERSION < 11000
 
 template <unsigned int subgroup_size, typename ValueType,
           typename Callable>
