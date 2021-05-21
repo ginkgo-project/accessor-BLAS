@@ -101,14 +101,14 @@ int main(int argc, char **argv) {
     }
 
     // constexpr std::size_t max_rows{24 * 1024};
-    constexpr std::size_t max_rows{10000};
+    constexpr std::size_t max_rows{34};
     // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
-    
-    constexpr std::size_t start = max_rows;//std::max(std::size_t{32}, max_rows / 50);  // max_rows / 48;
+
+    constexpr std::size_t start = max_rows - 4; //max_rows - 4;
     // constexpr auto start = max_rows / 48;
-    constexpr std::size_t row_incr = 1; // start;
+    constexpr std::size_t row_incr = 1;  // start;
 
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
@@ -129,13 +129,15 @@ int main(int argc, char **argv) {
     value_type res_ref_norm{1.0};
     Memory<value_type> reduce_memory(Memory<ar_type>::Device::cpu,
                                      max_res_num_elems);
+    Memory<std::uint32_t> trsv_helper(Memory<std::uint32_t>::Device::gpu, 2);
+
     auto ar_compute_error = [&](matrix_info x_info) {
         value_type error{};
         ar_data.sync_x();
         error = compare(x_info, cpu_x_ref.const_data(), ar_data.cpu_x_const(),
                         reduce_memory.data());
-        //std::cout << '\n';
-        //print_mtx(x_info, ar_data.cpu_x_const());
+        // std::cout << '\n';
+        // print_mtx(x_info, ar_data.cpu_x_const());
         ar_data.reset_x();
         return error / res_ref_norm;
     };
@@ -150,12 +152,13 @@ int main(int argc, char **argv) {
 
     // Setting up names and associated benchmark and error functions
 
-    constexpr std::size_t benchmark_num{6};
+    constexpr std::size_t benchmark_num{4};
     constexpr std::size_t benchmark_reference{benchmark_num - 1};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::string, std::function<value_type(matrix_info)>>;
     std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+        /*
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv(m_info, t_matrix_type, d_matrix_type,
@@ -170,6 +173,7 @@ int main(int argc, char **argv) {
                                   st_data.gpu_x());
                          },
                          "Error TRSV fp32", st_compute_error},
+        //*/
         benchmark_info_t{"CUBLAS TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
@@ -189,8 +193,8 @@ int main(int argc, char **argv) {
         benchmark_info_t{"TRSV_2 fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_2(m_info, t_matrix_type, d_matrix_type,
-                                  st_data.gpu_mtx_const(), x_info,
-                                  st_data.gpu_x());
+                                    st_data.gpu_mtx_const(), x_info,
+                                    st_data.gpu_x(), trsv_helper.data());
                          },
                          "Error TRSV_2 fp32", st_compute_error},
         benchmark_info_t{"Hand TRSV fp64",
