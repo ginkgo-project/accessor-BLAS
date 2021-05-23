@@ -261,7 +261,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     // All threads: load triangular matrix into shared memory
     // Note: Read it coalesced and transpose it.
     //       L is stored in column major for fast updates
-#pragma unroll
     for (int row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
         const auto col = threadIdx.x;
@@ -360,6 +359,159 @@ void trsv_2(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
             <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x, trsv_helper);
     } else {
         kernel::lower_trsv_2<subwarp_size, swarps_per_block, dmtx_t::non_unit>
+            <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x, trsv_helper);
+    }
+}
+
+namespace kernel {
+
+
+// PTX instruction nanosleep kind of yields
+// See:
+// https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#miscellaneous-instructions-nanosleep
+// Note: Looks like the best number for grid is: ceildiv(n, WARP_SIZE) since:
+//       n=1000, grid = 32; n=10000, grid = 313
+// Paper to follow for Impl.: https://epubs.siam.org/doi/abs/10.1137/12088358X
+
+// Must be called with 2-D blocks, and a 1-D grid
+template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
+          typename ValueType>
+__global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
+    const matrix_info m_info, const ValueType *__restrict__ mtx,
+    const matrix_info x_info, ValueType *__restrict__ x,
+    std::uint32_t *idx_helper) {
+    static_assert(swarp_size <= WARP_SIZE,
+                  "Subwarp size must be smaller than the WARP_SIZE");
+    static_assert((swarp_size & (swarp_size - 1)) == 0,
+                  "swarp_size must be a power of 2");
+    static_assert(swarp_size % (swarps_per_block) == 0,
+                  "swarp_size must be a multiple of swarps_per_block");
+    // assert: blockDim.x == swarp_size; blockDim.y = swarps_per_block;
+    //         blockDim.z = 1
+    constexpr int triang_stride = swarp_size + 1;
+
+    //__shared__ ValueType shared[swarp_size * triang_stride];
+    __shared__ ValueType triang[swarp_size * triang_stride];
+    //__shared__ ValueType mtx_cache[swarp_size * triang_stride];
+    __shared__ std::uint32_t shared_row_block_idx[1];
+    //= reinterpret_cast<std::uint32_t *>(
+    //    triang_stride + swarp_size * triang_stride);
+    // correction value for x[block_col * swarp_size + threadIdx.x]
+    __shared__ ValueType x_correction[swarp_size];
+
+    const auto group = cg::this_thread_block();
+    if (threadIdx.x == 0 && threadIdx.y == 0) {
+        *shared_row_block_idx = atomicInc(idx_helper + 1, ~std::uint32_t{0});
+    }
+    group.sync();
+    const std::int64_t row_block_idx = *shared_row_block_idx;
+    // printf("(x, y): (%d, %d) ");
+
+    if (row_block_idx * swarp_size >= m_info.size[0]) {
+        return;
+    }
+
+    // All threads: load triangular matrix into shared memory
+    // Note: Read it coalesced and transpose it.
+    //       L is stored in column major for fast updates
+    for (int row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
+        // threadIdx.x stores the column here to read coalesced
+        const auto col = threadIdx.x;
+        const std::int64_t global_row = row_block_idx * swarp_size + row;
+        const std::int64_t global_col = row_block_idx * swarp_size + col;
+        triang[col * triang_stride + row] =
+            (dmtx == dmtx_t::unit && col == row || row < col ||
+             global_row >= m_info.size[0])
+                ? ValueType{1}
+                : mtx[global_row * m_info.stride + global_col];
+    }
+    group.sync();
+    // TODO maybe change type of idx_helper
+    volatile std::int32_t *last_finished_col =
+        reinterpret_cast<std::int32_t *>(idx_helper);
+
+    constexpr int num_local_rows = swarp_size / swarps_per_block;
+    ValueType local_row_result[num_local_rows] = {};
+    for (int col_block = 0; col_block < row_block_idx; ++col_block) {
+        const auto global_col = col_block * swarp_size + threadIdx.x;
+        // Wait until result is known for current column block
+        // Maybe add __nanosleep(200) to ensure it is yielded
+        if (threadIdx.x == 0 && threadIdx.y == 0) {
+            while (*last_finished_col < col_block) {
+            }
+        }
+        group.sync();
+        const auto x_cached = x[global_col * x_info.stride];
+#pragma unroll
+        for (int local_row_idx = 0; local_row_idx < num_local_rows;
+             ++local_row_idx) {
+            const auto global_row = row_block_idx * swarp_size +
+                                    local_row_idx * swarps_per_block +
+                                    threadIdx.y;
+            const std::int64_t mtx_idx =
+                global_row * m_info.stride + global_col;
+            local_row_result[local_row_idx] += x_cached * mtx[mtx_idx];
+        }
+    }
+    const auto swarp = cg::tiled_partition<swarp_size>(group);
+    if (threadIdx.x == 0 && threadIdx.y == 0) {
+        for (int i = 0; i < swarp_size; ++i) {
+            x_correction[i] = 0;
+        }
+    }
+    group.sync();
+#pragma unroll
+    for (int local_row_idx = 0; local_row_idx < num_local_rows;
+         ++local_row_idx) {
+        x_correction[local_row_idx * swarps_per_block + threadIdx.y] =
+            reduce(swarp, local_row_result[local_row_idx],
+                   [](ValueType a, ValueType b) { return a + b; });
+    }
+    group.sync();
+
+    // Solve triangular system
+    if (threadIdx.y == 0) {
+        const auto row = threadIdx.x;
+        const std::int64_t x_idx =
+            (row_block_idx * swarp_size + row) * x_info.stride;
+        auto local_solution = x[x_idx] - x_correction[row];
+
+        for (int col = 0; col < swarp_size; ++col) {
+            const auto mtx_val = triang[col * triang_stride + row];
+            const auto current_x = swarp.shfl(local_solution / mtx_val, col);
+            if (row == col) {
+                local_solution = current_x;
+            }
+            if (row > col) {
+                local_solution -= mtx_val * current_x;
+            }
+        }
+        x[x_idx] = local_solution;
+        __threadfence();
+        if (threadIdx.x == 0) {
+            *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
+        }
+    }
+}
+
+}  // namespace kernel
+
+template <typename ValueType>
+void trsv_3(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
+            const ValueType *mtx, const matrix_info x_info, ValueType *x,
+            std::uint32_t *trsv_helper) {
+    constexpr std::int32_t subwarp_size{kernel::WARP_SIZE};
+    constexpr std::int32_t swarps_per_block{4};
+    const dim3 block_solve(subwarp_size, swarps_per_block, 1);
+    const dim3 grid_solve(
+        ceildiv(m_info.size[0], static_cast<std::size_t>(subwarp_size)), 1, 1);
+
+    kernel::trsv_init<<<1, 1>>>(trsv_helper);
+    if (dtype == dmtx_t::unit) {
+        kernel::lower_trsv_3<subwarp_size, swarps_per_block, dmtx_t::unit>
+            <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x, trsv_helper);
+    } else {
+        kernel::lower_trsv_3<subwarp_size, swarps_per_block, dmtx_t::non_unit>
             <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x, trsv_helper);
     }
 }

@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
 
     // Setting up names and associated benchmark and error functions
 
-    constexpr std::size_t benchmark_num{3};
+    constexpr std::size_t benchmark_num{4};
     constexpr std::size_t benchmark_reference{benchmark_num - 1};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
@@ -191,6 +191,13 @@ int main(int argc, char **argv) {
                          },
                          "Error TRSV_2 fp32", st_compute_error},
         */
+        benchmark_info_t{"TRSV_3 fp64",
+                         [&](matrix_info m_info, matrix_info x_info) {
+                             trsv_3(m_info, t_matrix_type, d_matrix_type,
+                                    ar_data.gpu_mtx_const(), x_info,
+                                    ar_data.gpu_x(), trsv_helper.data());
+                         },
+                         "Error TRSV_3 fp64", ar_compute_error},
         benchmark_info_t{"CUBLAS TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
