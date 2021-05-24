@@ -162,13 +162,13 @@ int main(int argc, char **argv) {
 
     // Setting up names and associated benchmark and error functions
 
-    constexpr std::size_t benchmark_num{4};
-    constexpr std::size_t benchmark_reference{benchmark_num - 1};  //{benchmark_num - 2};
+    constexpr std::size_t benchmark_num{7};
+    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::string, std::function<value_type(matrix_info)>>;
     std::array<benchmark_info_t, benchmark_num> benchmark_info = {
-        //*
+        /*
         benchmark_info_t{"TRSV multi-kernel fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv(m_info, t_matrix_type, d_matrix_type,
@@ -176,15 +176,6 @@ int main(int argc, char **argv) {
                                   ar_data.gpu_x());
                          },
                          "Error TRSV multi-kernel fp64", ar_compute_error},
-        /*
-        benchmark_info_t{"TRSV multi-kernel fp32",
-                         [&](matrix_info m_info, matrix_info x_info) {
-                             trsv(m_info, t_matrix_type, d_matrix_type,
-                                  st_data.gpu_mtx_const(), x_info,
-                                  st_data.gpu_x());
-                         },
-                         "Error TRSV multi-kernel fp32", st_compute_error},
-        */
         benchmark_info_t{"TRSV single kernel fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_2(m_info, t_matrix_type, d_matrix_type,
@@ -192,14 +183,6 @@ int main(int argc, char **argv) {
                                     ar_data.gpu_x(), trsv_helper.data());
                          },
                          "Error TRSV single kernel fp64", ar_compute_error},
-        /*
-        benchmark_info_t{"TRSV single kernel fp32",
-                         [&](matrix_info m_info, matrix_info x_info) {
-                             trsv_2(m_info, t_matrix_type, d_matrix_type,
-                                    st_data.gpu_mtx_const(), x_info,
-                                    st_data.gpu_x(), trsv_helper.data());
-                         },
-                         "Error TRSV single kernel fp32", st_compute_error},
         */
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
@@ -208,7 +191,6 @@ int main(int argc, char **argv) {
                                     ar_data.gpu_x(), trsv_helper.data());
                          },
                          "Error TRSV fp64", ar_compute_error},
-        /*
         benchmark_info_t{"TRSV fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_3(m_info, t_matrix_type, d_matrix_type,
@@ -216,8 +198,6 @@ int main(int argc, char **argv) {
                                     st_data.gpu_x(), trsv_helper.data());
                          },
                          "Error TRSV fp32", st_compute_error},
-                         */
-        /*
         benchmark_info_t{"TRSV Acc<fp64, fp64>",
                          [&](matrix_info m_info, matrix_info x_info) {
                              acc_trsv<ar_type>(
@@ -242,7 +222,6 @@ int main(int argc, char **argv) {
                                  st_data.gpu_x(), trsv_helper.data());
                          },
                          "Error TRSV Acc<fp32, fp32>", st_compute_error},
-                         */
         benchmark_info_t{"CUBLAS TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
@@ -251,7 +230,6 @@ int main(int argc, char **argv) {
                                          ar_data.gpu_x());
                          },
                          "Error CUBLAS TRSV fp64", ar_compute_error},
-        /*
         benchmark_info_t{"CUBLAS TRSV fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
