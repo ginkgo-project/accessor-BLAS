@@ -8,7 +8,6 @@
 #include <string>
 #include <type_traits>
 
-//#include "../error_tobias.hpp"
 #include "gemv_kernels.cuh"
 #include "gemv_memory.cuh"
 #include "memory.cuh"
@@ -111,8 +110,8 @@ int main(int argc, char **argv) {
     const bool reset_result{measure_error && ar_beta != 0};
     const bool normalize_error{true};
 
-    // constexpr std::size_t max_rows{24 * 1024};
-    constexpr std::size_t max_rows{6500};
+    constexpr std::size_t max_rows{24 * 1024};
+    // constexpr std::size_t max_rows{6500};
     // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
@@ -180,10 +179,10 @@ int main(int argc, char **argv) {
     std::cout.precision(16);
     std::cout << std::scientific;
 
-    constexpr auto start = 6140;  // max_rows / 48;
+    constexpr auto start = 100;  // max_rows / 48;
     // constexpr auto start = max_rows / 48;
-    constexpr auto row_incr = 1;  // start;
-    for (std::size_t num_rows = start; num_rows <= max_rows && num_rows <= 6150;
+    constexpr auto row_incr = start;  // start;
+    for (std::size_t num_rows = start; num_rows <= max_rows;
          num_rows += row_incr) {
         const matrix_info m_info{{num_rows, num_rows}, max_rows};
         const matrix_info x_info{{num_rows, 1}};
