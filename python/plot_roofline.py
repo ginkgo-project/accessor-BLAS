@@ -46,6 +46,24 @@ h_dict_dot_error = {
         "cublas_fp32": "Error CUBLAS DOT fp32",
         }
 
+h_dict_trsv_runtime = {
+        "size" : "Num rows",
+        "fp64": "TRSV fp64",
+        "fp32": "TRSV fp32",
+        "acc_mix": "TRSV Acc<fp64, fp32>",
+        "cublas_fp64": "CUBLAS TRSV fp64",
+        "cublas_fp32": "CUBLAS TRSV fp32",
+        }
+
+h_dict_trsv_error = {
+        "size" : "Num rows",
+        "fp64": "Error TRSV fp64",
+        "fp32": "Error TRSV fp32",
+        "acc_mix": "Error TRSV Acc<fp64, fp32>",
+        "cublas_fp64": "Error CUBLAS TRSV fp64",
+        "cublas_fp32": "Error CUBLAS TRSV fp32",
+        }
+
 def read_csv(h_dict, path=None):
     """
     Opens the CSV file in 'path' and returns 2 dictionaries:
@@ -140,14 +158,20 @@ def gemv_compute_flop(size, time_ms):
 def gemv_compute_error(size, error):
     return error
 
+def trsv_compute_flop(size, time_ms):
+    flops = size * size
+    Mflops = flops / (1000 * 1000)
+    return Mflops / time_ms
+
 
 plot_dict_list = [
         {
             #"file": "./results/20210430_0600_v100_gemv_ab1_flops.csv",
             #"file": "./results/20210430_2000_v100_gemv_ab1_flops.csv",
             #"file": "./results/20210505_1300_v100_gemv_ab1_flops.csv",
-            "file": "./results/20210506_1600_v100_gemv_ab1_flops_-1,1.csv",
+            #"file": "./results/20210506_1600_v100_gemv_ab1_flops_-1,1.csv",
             #"file": "./results/20210506_1800_v100_gemv_ab1_flops_0,1.csv",
+            "file": "./results/20210524_1739_v100_gemv_time_ms.csv",
             "header_trans": h_dict_gemv_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -165,8 +189,9 @@ plot_dict_list = [
             #"file": "./results/20210430_0600_v100_gemv_ab1_error.csv",
             #"file": "./results/20210430_2000_v100_gemv_ab1_error.csv",
             #"file": "./results/20210505_1300_v100_gemv_ab1_error.csv",
-            "file": "./results/20210506_1600_v100_gemv_ab1_error_-1,1.csv",
+            #"file": "./results/20210506_1600_v100_gemv_ab1_error_-1,1.csv",
             #"file": "./results/20210506_1800_v100_gemv_ab1_error_0,1.csv",
+            "file": "./results/20210524_1739_v100_gemv_error.csv",
             "header_trans": h_dict_gemv_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -179,10 +204,39 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
+            "file": "./results/20210524_1739_v100_trsv_time_ms.csv",
+            "header_trans": h_dict_trsv_runtime,
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "trsv_flops",
+            "plot_prefix": "v100_",
+            "label_prefix": "TRSV ",
+            "conv_func": trsv_compute_flop,
+            "xlabel": "Number of rows",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+            #"xlim": {"left": None, "right": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
+        },
+        {
+            "file": "./results/20210524_1739_v100_trsv_error.csv",
+            "header_trans": h_dict_trsv_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "trsv_error",
+            "plot_prefix": "v100_",
+            "label_prefix": "TRSV ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Number of rows",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
             #"file": "./results/20210430_2000_v100_dot.csv",
             #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
-            "file": "./results/20210506_1600_v100_dot_-1,1.csv",
+            #"file": "./results/20210506_1600_v100_dot_-1,1.csv",
             #"file": "./results/20210506_1800_v100_dot_0,1.csv",
+            "file": "./results/20210524_1742_v100_dot.csv",
             "header_trans": h_dict_dot_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -215,8 +269,9 @@ plot_dict_list = [
         {
             #"file": "./results/20210430_2000_v100_dot.csv",
             #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
-            "file": "./results/20210506_1600_v100_dot_-1,1.csv",
+            #"file": "./results/20210506_1600_v100_dot_-1,1.csv",
             #"file": "./results/20210506_1800_v100_dot_0,1.csv",
+            "file": "./results/20210524_1742_v100_dot.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -233,7 +288,8 @@ plot_dict_list = [
             #"file": "./results/20210505_1300_v100_dot_32xSM.csv",
             #"file": "./results/20210506_1600_v100_dot_-1,1.csv",
             #"file": "./results/20210506_1800_v100_dot_0,1.csv",
-            "file": "./results/20210506_1930_v100_dot_error_avg_-1,1.csv",
+            #"file": "./results/20210506_1930_v100_dot_error_avg_-1,1.csv",
+            "file": "./results/20210524_1742_v100_dot_error.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
