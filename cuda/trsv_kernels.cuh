@@ -435,10 +435,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                 const int col = threadIdx.x;
                 const auto triang_idx = col * triang_stride + row;
                 const auto local_val = triang[triang_idx];
-                const auto diag_el = swarp.shfl(local_val, row);
+                const auto diag_el = ValueType{1} / swarp.shfl(local_val, row);
                 if (col <= row) {
-                    triang[triang_idx] = (row == col) ? ValueType{1} / diag_el
-                                                      : local_val / diag_el;
+                    triang[triang_idx] = (row == col) ? diag_el
+                                                      : local_val * diag_el;
                 }
             }
         }
