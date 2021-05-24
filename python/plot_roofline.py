@@ -219,6 +219,44 @@ plot_dict_list = [
             #"ylim": {"bottom": 0, "top": 225,},
         },
         {
+            "file": "./results/20210524_1830_v100_trsv_progress_time_ms.csv",
+            "header_trans": {
+                "size" : "Num rows",
+                "fp64_1": "TRSV multi-kernel fp64",
+                "fp64_2": "TRSV single kernel fp64",
+                "fp64_3": "TRSV fp64",
+                "cublas_fp64": "CUBLAS TRSV fp64",
+                },
+            "plot_order": ["fp64_1", "fp64_2", "fp64_3", "cublas_fp64"],
+            "plot_detail": {
+                "fp64_1": {
+                    "label": "fp64 multi-kernel",
+                    "color": myred,
+                    },
+                "fp64_2": {
+                    "label": "fp64 single kernel",
+                    "color": mygreen,
+                    },
+                "fp64_3": {
+                    "label": "fp64 inverse L",
+                    "color": myblue,
+                    },
+                "cublas_fp64": {
+                    "label": "CuBLAS fp64",
+                    "color": myorange,
+                    },
+                },
+            "plot_name": "trsv_progress_flops",
+            "plot_prefix": "v100_",
+            "label_prefix": "TRSV ",
+            "conv_func": trsv_compute_flop,
+            "xlabel": "Number of rows",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+            #"xlim": {"left": None, "right": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
+        },
+        {
             "file": "./results/20210524_1739_v100_trsv_error.csv",
             "header_trans": h_dict_trsv_error,
             "plot_order": plot_order_error,
