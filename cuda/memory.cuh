@@ -35,7 +35,7 @@ class Memory {
                 break;
             case Device::gpu:
                 synchronize();
-                CUDA_CALL(cudaFree(data_));
+                cudaFree(data_);
                 data_ = nullptr;
                 break;
         };
