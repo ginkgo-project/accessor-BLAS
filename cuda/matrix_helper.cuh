@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 
 #include "memory.cuh"
 #include "utils.cuh"
 
+// Note: sub-normal values are filtered out
 template <typename ValueType, typename ValueDist, typename Engine>
 Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
                           Engine &&engine) {
@@ -18,7 +20,35 @@ Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
-            ptr[idx] = dist(engine);
+            ValueType val{};
+            do {
+                val = dist(engine);
+            } while (!std::isnormal(val));
+            ptr[idx] = val;
+        }
+    }
+
+    return res;
+}
+
+// Note: sub-normal values are filtered out
+template <typename ValueType, typename ValueDist, typename Engine>
+Memory<ValueType> gen_dd_mtx(const matrix_info &info, ValueDist &&dist,
+                             Engine &&engine, ValueType diag_val) {
+    if (info.stride < info.size[1]) {
+        throw std::runtime_error("Wrong use of stride");
+    }
+    Memory<ValueType> res(Memory<ValueType>::Device::cpu, info.get_1d_size());
+    auto ptr = res.data();
+
+    for (std::size_t row = 0; row < info.size[0]; ++row) {
+        for (std::size_t col = 0; col < info.size[1]; ++col) {
+            const std::size_t idx = row * info.stride + col;
+            ValueType val{};
+            do {
+                val = dist(engine);
+            } while (!std::isnormal(val));
+            ptr[idx] = (row != col) ? val : diag_val;
         }
     }
 
@@ -26,8 +56,8 @@ Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
 }
 
 template <typename ValueType, typename ValueDist, typename Engine>
-void write_random(const matrix_info &info, ValueDist &&dist,
-                          Engine &&engine, ValueType *io) {
+void write_random(const matrix_info &info, ValueDist &&dist, Engine &&engine,
+                  ValueType *io) {
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;

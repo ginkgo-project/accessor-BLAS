@@ -14,6 +14,9 @@
 #include "trsv_memory.cuh"
 #include "utils.cuh"
 
+// Reason for triangular matrices to be ill-conditioned:
+// http://www.math.lsa.umich.edu/~divakar/1-ViswanathTrefethen1998.pdf
+
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
     std::size_t end = info.size[0];
@@ -106,17 +109,24 @@ int main(int argc, char **argv) {
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
-    constexpr std::size_t start = 1000; //max_rows - 4;
+    constexpr std::size_t start = 500;  // max_rows - 4;
     // constexpr auto start = max_rows / 48;
-    constexpr std::size_t row_incr = 1000;  // start;
+    constexpr std::size_t row_incr = start;  // start;
 
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
     // std::uniform_real_distribution<value_type> mtx_dist(-10.0, 10.0);
     auto vector_dist = mtx_dist;
+    auto cpu_mtx_gen = [&](matrix_info m_info) {
+        //return gen_dd_mtx<ar_type>(m_info, mtx_dist, rengine, 1);
+        return gen_mtx<ar_type>(m_info, mtx_dist, rengine);
+    };
+    auto cpu_vect_gen = [&](matrix_info v_info) {
+        return gen_mtx<ar_type>(v_info, vector_dist, rengine);
+    };
 
     auto ar_data =
-        TrsvMemory<ar_type>(max_rows, max_cols, mtx_dist, vector_dist, rengine);
+        TrsvMemory<ar_type>(max_rows, max_cols, cpu_mtx_gen, cpu_vect_gen);
     auto st_data = TrsvMemory<st_type>(ar_data);
 
     auto cublasHandle = cublas_get_handle();
