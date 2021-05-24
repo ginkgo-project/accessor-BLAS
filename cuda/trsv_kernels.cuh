@@ -421,7 +421,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         triang[col * triang_stride + row] =
             (dmtx == dmtx_t::unit && col == row)
                 ? ValueType{1}
-                : (row > col && global_row < m_info.size[0])
+                : (col <= row && global_row < m_info.size[0])
                       ? mtx[global_row * m_info.stride + global_col]
                       : ValueType{0};
     }
@@ -436,7 +436,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                 const auto triang_idx = col * triang_stride + row;
                 const auto local_val = triang[triang_idx];
                 const auto diag_el = swarp.shfl(local_val, row);
-                if (row <= col) {
+                if (col <= row) {
                     triang[triang_idx] = (row == col) ? ValueType{1} / diag_el
                                                       : local_val / diag_el;
                 }
