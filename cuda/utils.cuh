@@ -43,7 +43,7 @@ struct matrix_info {
 };
 
 template <typename ValueType>
-ValueType ceildiv(ValueType a, ValueType b) {
+constexpr ValueType ceildiv(ValueType a, ValueType b) {
     return (a - 1) / b + 1;
 }
 
@@ -115,7 +115,6 @@ void cublas_set_device_ptr_mode(cublasHandle_t handle) {
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE));
 }
 
-
 template <typename Callable>
 double benchmark_function(Callable func, bool skip = false) {
     constexpr int bench_iters{10};
@@ -143,5 +142,4 @@ double benchmark_function(Callable func, bool skip = false) {
     // result_ms /= static_cast<double>(bench_iters);
     return bench_iters == 0 ? double{} : result_ms;
 }
-
 

@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     value_dist(engine);
     };
     /*/
-    std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
     //*/
 
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
@@ -145,9 +145,9 @@ int main(int argc, char **argv) {
         // return std::abs(res);
     };
     // constexpr std::size_t steps = 1024 - 1;
-    constexpr std::size_t steps = 128 - 1;
-    constexpr auto start = max_size / 1024;
-    constexpr auto row_incr = (max_size - start) / steps;
+    constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
+    constexpr std::size_t row_incr = 2'000'000;  // (max_size - start) / steps;
+    constexpr std::size_t steps = ceildiv((max_size - start), row_incr) + 2;
     constexpr std::size_t randomize_num{10};
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
