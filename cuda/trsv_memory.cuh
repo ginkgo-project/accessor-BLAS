@@ -13,13 +13,13 @@ class TrsvMemory {
     static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
 
    public:
-    template <typename MtxDist, typename VectDist, typename RndEngine>
-    TrsvMemory(std::size_t max_rows, std::size_t max_cols, MtxDist &&mtx_dist,
-               VectDist &&vect_dist, RndEngine &&engine)
+    template <typename MtxGen, typename VectGen>
+    TrsvMemory(std::size_t max_rows, std::size_t max_cols, MtxGen &&cpu_mtx_gen,
+               VectGen &&cpu_vect_gen)
         : m_info_{{max_rows, max_cols}},
           x_info_{{max_cols, 1}},
-          cpu_mtx_(gen_mtx<ValueType>(m_info_, mtx_dist, engine)),
-          cpu_x_(gen_mtx<ValueType>(x_info_, vect_dist, engine)),
+          cpu_mtx_(cpu_mtx_gen(m_info_)),
+          cpu_x_(cpu_vect_gen(x_info_)),
           cpu_x_init_(cpu_x_),
           gpu_mtx_(GPU_device, m_info_.get_1d_size()),
           gpu_x_(GPU_device, x_info_.get_1d_size()),
