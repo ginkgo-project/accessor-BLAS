@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     // constexpr std::size_t steps = 1024 - 1;
     constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
     constexpr std::size_t row_incr = 2'000'000;  // (max_size - start) / steps;
-    constexpr std::size_t steps = ceildiv((max_size - start), row_incr) + 2;
+    constexpr std::size_t steps = (max_size - start) / row_incr;
     constexpr std::size_t randomize_num{10};
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
             ar_data.copy_cpu_to_gpu();
             st_data.convert_from(ar_data);
         }
-        for (std::size_t vec_size = start, i = 0; vec_size <= max_size;
+        for (std::size_t vec_size = start, i = 0; vec_size < max_size;
              vec_size += row_incr, ++i) {
             benchmark_vec_size.at(i) = vec_size;
             const matrix_info x_info{{vec_size, 1}};
