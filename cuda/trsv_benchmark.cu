@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     //*/
 
     constexpr tmtx_t t_matrix_type = tmtx_t::lower;
-    constexpr dmtx_t d_matrix_type = dmtx_t::unit;
+    constexpr dmtx_t d_matrix_type = dmtx_t::non_unit;
 
     bool measure_error{false};
 
@@ -103,18 +103,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    constexpr std::size_t max_rows{24 * 1024};
+    constexpr std::size_t max_rows{24 * 1000};
     // constexpr std::size_t max_rows{37};
-    // constexpr std::size_t max_rows{8 * 1024};
+    // constexpr std::size_t max_rows{10 * 1000};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
-    constexpr std::size_t start = 50;  // max_rows - 4;
+    constexpr std::size_t start = std::min(max_rows, std::size_t{50});
     // constexpr auto start = max_rows / 48;
     constexpr std::size_t row_incr = start;  // start;
 
     std::default_random_engine rengine(42);
-    std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
     // std::uniform_real_distribution<value_type> mtx_dist(-10.0, 10.0);
     auto vector_dist = mtx_dist;
     auto cpu_mtx_gen = [&](matrix_info m_info) {
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
 
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
         std::array<value_type, benchmark_num> local_res{};
-        const matrix_info m_info{{num_rows, num_rows}, num_rows};
+        const matrix_info m_info{{num_rows, num_rows}, max_cols};
         const matrix_info x_info{{num_rows, 1}};
 
         if (measure_error) {

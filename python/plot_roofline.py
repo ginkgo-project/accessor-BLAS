@@ -6,6 +6,8 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_pdf import PdfPages
 
 
+# TODO: Add marker at different points to better distinguish the lines
+
 plot_folder = "./plots/"
 
 

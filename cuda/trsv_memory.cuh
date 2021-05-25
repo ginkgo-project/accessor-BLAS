@@ -1,10 +1,64 @@
 #pragma once
 
+#include <cusolverDn.h>
+
+#include <algorithm>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #include "matrix_helper.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
+
+namespace detail {
+
+std::string get_cusolver_error_string(cusolverStatus_t err) {
+    switch (err) {
+        case CUSOLVER_STATUS_SUCCESS:
+            return "Success";
+        case CUSOLVER_STATUS_NOT_INITIALIZED:
+            return "Not initialized";
+        case CUSOLVER_STATUS_ALLOC_FAILED:
+            return "Allocation failed";
+        case CUSOLVER_STATUS_INVALID_VALUE:
+            return "Invalid value";
+        case CUSOLVER_STATUS_ARCH_MISMATCH:
+            return "Architecture mismatch";
+        case CUSOLVER_STATUS_EXECUTION_FAILED:
+            return "Execution failed";
+        case CUSOLVER_STATUS_INTERNAL_ERROR:
+            return "Internal error";
+        case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+            return "Matrix type not supported";
+        default:
+            return std::string("Unknown Error: ") + std::to_string(err);
+    };
+}
+
+}  // namespace detail
+
+#define CUSOLVER_CALL(call)                                                   \
+    do {                                                                      \
+        auto err = call;                                                      \
+        if (err != CUSOLVER_STATUS_SUCCESS) {                                 \
+            std::cerr << "CuSolver error in file " << __FILE__                \
+                      << " L:" << __LINE__ << "; Error: " << err << '\n';     \
+            throw std::runtime_error(std::string("Error: ") +                 \
+                                     detail::get_cusolver_error_string(err)); \
+        }                                                                     \
+    } while (false)
+
+using CusolverContext = std::remove_pointer_t<cusolverDnHandle_t>;
+
+std::unique_ptr<CusolverContext, std::function<void(cusolverDnHandle_t)>>
+cusolver_get_handle() {
+    cusolverDnHandle_t handle;
+    CUSOLVER_CALL(cusolverDnCreate(&handle));
+    return {handle, [](cusolverDnHandle_t handle) {
+                CUSOLVER_CALL(cusolverDnDestroy(handle));
+            }};
+}
 
 template <typename ValueType>
 class TrsvMemory {
@@ -27,7 +81,79 @@ class TrsvMemory {
         gpu_mtx_.copy_from(cpu_mtx_);
         gpu_x_.copy_from(cpu_x_);
         gpu_x_init_.copy_from(cpu_x_init_);
+
+        if (m_info_.size[0] != m_info_.size[1]) {
+            throw std::runtime_error(std::string("Matrix is not quadratic: ") +
+                                     std::to_string(m_info_.size[0]) + " x " +
+                                     std::to_string(m_info_.size[1]));
+        }
+        // Factorize matrix into L and U on the CUDA device:
+        auto handle = cusolver_get_handle();
+        // Reduce the workspace size to a minimum (reduces runtime as well) with
+        // cusolverDnSetAdvOptions(params, CUSOLVERDN_GETRF, CUSOLVER_ALG_1)
+        // cublasOperation_t trans = CUBLAS_OP_T;
+
+        Memory<int> cpu_info(Memory<int>::Device::cpu, 1);
+        *cpu_info.data() = 0;
+        Memory<int> gpu_info(Memory<int>::Device::gpu, 1);
+        gpu_info = cpu_info;
+
+        const auto pivot_size = std::max(m_info_.size[0], m_info_.size[1]);
+        Memory<int> cpu_pivot(Memory<int>::Device::cpu, pivot_size);
+        Memory<int> gpu_pivot(Memory<int>::Device::gpu, pivot_size);
+        for (std::size_t i = 0; i < pivot_size; ++i) {
+            cpu_pivot.data()[i] = i;
+        }
+        gpu_pivot = cpu_pivot;
+
+        int workspace_size{};
+
+        // Get workspace size requirement
+        CUSOLVER_CALL(cusolverDnDgetrf_bufferSize(
+            handle.get(), static_cast<int>(m_info_.size[0]),
+            static_cast<int>(m_info_.size[1]), gpu_mtx_.data(),
+            static_cast<int>(m_info_.stride), &workspace_size));
+
+        Memory<ValueType> gpu_workspace(GPU_device, workspace_size);
+        // std::cout << "Workspace size: " << workspace_size << '\n';
+
+        // Expects the matrix in column-major
+        // Run matrix factorization
+        CUSOLVER_CALL(cusolverDnDgetrf(
+            handle.get(), static_cast<int>(m_info_.size[0]),
+            static_cast<int>(m_info_.size[1]), gpu_mtx_.data(),
+            static_cast<int>(m_info_.stride), gpu_workspace.data(),
+            gpu_pivot.data(), gpu_info.data()));
+        // Copy back to CPU (maybe transpose?)
+
+        // cpu_pivot = gpu_pivot;
+        cpu_info = gpu_info;
+        //std::cout << "devInfo: " << *cpu_info.data() << '\n';
+        synchronize();
+        // std::cout << "cpu_pivot:\n";
+        // print_mtx(matrix_info{{1ull, pivot_size}}, cpu_pivot.data());
+
+        // Memory<ValueType> cpu_pre_perm(CPU_device, m_info_.get_1d_size());
+        // cpu_pre_perm = gpu_mtx_;
+
+        // Permute matrix according to pivot_info
+        cpu_mtx_ = gpu_mtx_;
+        /*
+        // Permuting should be done on the original data in the CPU, followed
+        // by generating the LU decomposition again!
+        for (int i = 0; i < m_info_.size[0]; ++i) {
+            for (int j = 0; j < m_info_.size[1]; ++j) {
+                const auto orig_idx = i * m_info_.stride + j;
+                const auto swap_idx =
+                    i * m_info_.stride + cpu_pivot.data()[j] - 1;
+
+                std::swap(cpu_mtx_.data()[orig_idx], cpu_mtx_.data()[swap_idx]);
+            }
+        }
+        gpu_mtx_ = cpu_mtx_;
+        //*/
     }
+
     template <typename OtherType>
     TrsvMemory(const TrsvMemory<OtherType> &other)
         : m_info_(other.m_info_),

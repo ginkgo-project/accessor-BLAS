@@ -1,5 +1,6 @@
-function(create_cuda_executable target cublas target_source)
-    #message(STATUS "Parameter: ${target} ${cublas} ${target_source}")
+# After `target_source`, list libraries to link against
+function(create_cuda_executable target target_source)
+    #message(STATUS "Parameter: ${target} ${target_source} ${ARGN}")
     add_executable("${target}")
     example_apply_default_target_settings("${target}")
     # Force the language to be CUDA (works, but the *.cu approach is cleaner)
@@ -19,7 +20,7 @@ function(create_cuda_executable target cublas target_source)
         # Make sure the cpp files are treated as cu files
         #$<$<COMPILE_LANGUAGE:CUDA>:-x cu>
         )
-    target_link_libraries("${target}" PRIVATE "${cublas}")
+    target_link_libraries("${target}" PRIVATE "${ARGN}")
 
     #target_include_directories("${target}" PRIVATE
     #    "${GINKGO_DIR}"
@@ -31,7 +32,9 @@ endfunction()
 enable_language(CUDA)
 find_library(CUBLAS cublas
     HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
+find_library(CUSOLVER cusolver
+    HINT ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
 
-create_cuda_executable("gemv_benchmark" "${CUBLAS}" "gemv_benchmark.cu")
-create_cuda_executable("dot_benchmark" "${CUBLAS}" "dot_benchmark.cu")
-create_cuda_executable("trsv_benchmark" "${CUBLAS}" "trsv_benchmark.cu")
+create_cuda_executable("gemv_benchmark" "gemv_benchmark.cu" "${CUBLAS}")
+create_cuda_executable("dot_benchmark" "dot_benchmark.cu" "${CUBLAS}")
+create_cuda_executable("trsv_benchmark" "trsv_benchmark.cu" "${CUBLAS}" "${CUSOLVER}")
