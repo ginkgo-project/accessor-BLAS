@@ -104,12 +104,14 @@ int main(int argc, char **argv) {
     }
 
     constexpr std::size_t max_rows{24 * 1000};
+    // constexpr std::size_t max_rows{8 * 1000};
     // constexpr std::size_t max_rows{37};
     // constexpr std::size_t max_rows{10 * 1000};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     constexpr std::size_t start = std::min(max_rows, std::size_t{50});
+    // constexpr std::size_t start = std::min(max_rows, std::size_t{1000});
     // constexpr auto start = max_rows / 48;
     constexpr std::size_t row_incr = start;  // start;
 
@@ -166,7 +168,7 @@ int main(int argc, char **argv) {
     constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
-                   std::string, std::function<value_type(matrix_info)>>;
+                   std::function<value_type(matrix_info)>>;
     std::array<benchmark_info_t, benchmark_num> benchmark_info = {
         /*
         benchmark_info_t{"TRSV multi-kernel fp64",
@@ -175,14 +177,14 @@ int main(int argc, char **argv) {
                                   ar_data.gpu_mtx_const(), x_info,
                                   ar_data.gpu_x());
                          },
-                         "Error TRSV multi-kernel fp64", ar_compute_error},
+                         ar_compute_error},
         benchmark_info_t{"TRSV single kernel fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_2(m_info, t_matrix_type, d_matrix_type,
                                     ar_data.gpu_mtx_const(), x_info,
                                     ar_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV single kernel fp64", ar_compute_error},
+                         ar_compute_error},
         */
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
@@ -190,14 +192,14 @@ int main(int argc, char **argv) {
                                     ar_data.gpu_mtx_const(), x_info,
                                     ar_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV fp64", ar_compute_error},
+                         ar_compute_error},
         benchmark_info_t{"TRSV fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_3(m_info, t_matrix_type, d_matrix_type,
                                     st_data.gpu_mtx_const(), x_info,
                                     st_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV fp32", st_compute_error},
+                         st_compute_error},
         benchmark_info_t{"TRSV Acc<fp64, fp64>",
                          [&](matrix_info m_info, matrix_info x_info) {
                              acc_trsv<ar_type>(
@@ -205,7 +207,7 @@ int main(int argc, char **argv) {
                                  ar_data.gpu_mtx_const(), x_info,
                                  ar_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV Acc<fp64, fp64>", ar_compute_error},
+                         ar_compute_error},
         benchmark_info_t{"TRSV Acc<fp64, fp32>",
                          [&](matrix_info m_info, matrix_info x_info) {
                              acc_trsv<ar_type>(
@@ -213,7 +215,7 @@ int main(int argc, char **argv) {
                                  st_data.gpu_mtx_const(), x_info,
                                  st_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV Acc<fp64, fp32>", st_compute_error},
+                         st_compute_error},
         benchmark_info_t{"TRSV Acc<fp32, fp32>",
                          [&](matrix_info m_info, matrix_info x_info) {
                              acc_trsv<st_type>(
@@ -221,7 +223,7 @@ int main(int argc, char **argv) {
                                  st_data.gpu_mtx_const(), x_info,
                                  st_data.gpu_x(), trsv_helper.data());
                          },
-                         "Error TRSV Acc<fp32, fp32>", st_compute_error},
+                         st_compute_error},
         benchmark_info_t{"CUBLAS TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
@@ -229,7 +231,7 @@ int main(int argc, char **argv) {
                                          ar_data.gpu_mtx_const(), x_info,
                                          ar_data.gpu_x());
                          },
-                         "Error CUBLAS TRSV fp64", ar_compute_error},
+                         ar_compute_error},
         benchmark_info_t{"CUBLAS TRSV fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
                              cublas_trsv(cublasHandle.get(), t_matrix_type,
@@ -237,7 +239,7 @@ int main(int argc, char **argv) {
                                          st_data.gpu_mtx_const(), x_info,
                                          st_data.gpu_x());
                          },
-                         "Error CUBLAS TRSV fp32", st_compute_error},
+                         st_compute_error},
         /*
         benchmark_info_t{"Hand TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
@@ -245,7 +247,6 @@ int main(int argc, char **argv) {
                                           ar_data.cpu_mtx_const(), x_info,
                                           ar_data.cpu_x());
                          },
-                         "Error Hand TRSV fp64",
                          [&](matrix_info x_info) {
                              value_type error{};
                              if (measure_error) {
@@ -264,7 +265,7 @@ int main(int argc, char **argv) {
         if (!measure_error) {
             std::cout << DELIM << std::get<0>(info);
         } else {
-            std::cout << DELIM << std::get<2>(info);
+            std::cout << DELIM << "Error " << std::get<0>(info);
         }
     }
     std::cout << '\n';
@@ -300,7 +301,7 @@ int main(int argc, char **argv) {
                 local_res[i] = benchmark_function(local_func, measure_error);
             } else {
                 benchmark_function(local_func, measure_error);
-                local_res[i] = std::get<3>(benchmark_info[i])(x_info);
+                local_res[i] = std::get<2>(benchmark_info[i])(x_info);
             }
         }
 
