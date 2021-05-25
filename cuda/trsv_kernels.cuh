@@ -32,13 +32,6 @@ __global__ __launch_bounds__(block_size) void test_idx() {
     printf("%d, %d: id = %d; warp: %d\n", tidx, tidy, idx, warp_idx);
 }
 
-template <std::int64_t block_size, typename MtxRange, typename XRange,
-          typename ResRange, typename ArType>
-__global__ __launch_bounds__(block_size) void acc_trsv(ArType alpha,
-                                                       MtxRange mtx, XRange x,
-                                                       ArType beta,
-                                                       ResRange res) {}
-
 }  // namespace kernel
 
 template <typename ValueType>
@@ -421,7 +414,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         triang[col * triang_stride + row] =
             (dmtx == dmtx_t::unit && col == row)
                 ? ValueType{1}
-                : (col <= row && global_row < m_info.size[0])
+                : (col <= row && global_row < m_info.size[0] &&
+                   global_col < m_info.size[1])
                       ? mtx[global_row * m_info.stride + global_col]
                       : ValueType{0};
     }
@@ -493,7 +487,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                                     threadIdx.y;
             const std::int64_t mtx_idx =
                 global_row * m_info.stride + global_col;
-            local_row_result[local_row_idx] += x_cached * mtx[mtx_idx];
+            local_row_result[local_row_idx] += (global_row < m_info.size[0])
+                                                   ? x_cached * mtx[mtx_idx]
+                                                   : ValueType{};
         }
     }
     if (threadIdx.x == 0 && threadIdx.y == 0) {
@@ -517,14 +513,18 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         const std::int64_t x_idx =
             (row_block_idx * swarp_size + row) * x_info.stride;
         // compute the local x and distribute it via shfl
-        const ValueType local_x = x[x_idx] - x_correction[row];
+        const ValueType local_x = (x_idx < x_info.size[0])
+                                      ? x[x_idx] - x_correction[row]
+                                      : ValueType{0};
         ValueType local_solution{};
         for (int col = 0; col < swarp_size; ++col) {
             // GEMV
             local_solution +=
                 triang[col * triang_stride + row] * swarp.shfl(local_x, col);
         }
-        x[x_idx] = local_solution;
+        if (x_idx < x_info.size[0]) {
+            x[x_idx] = local_solution;
+        }
         __threadfence();
         if (threadIdx.x == 0) {
             *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
@@ -606,7 +606,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         triang[col * triang_stride + row] =
             (dmtx == dmtx_t::unit && col == row)
                 ? ar_type{1}
-                : (col <= row && global_row < mtx.length(0))
+                : (col <= row && global_row < mtx.length(0) &&
+                   global_col < mtx.length(1))
                       ? mtx(global_row, global_col)
                       : ar_type{0};
     }
@@ -658,6 +659,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     volatile std::int32_t *last_finished_col =
         reinterpret_cast<std::int32_t *>(idx_helper);
 
+    //*
     constexpr int num_local_rows = swarp_size / swarps_per_block;
     ar_type local_row_result[num_local_rows] = {};
     for (int col_block = 0; col_block < row_block_idx; ++col_block) {
@@ -677,7 +679,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
                                     local_row_idx * swarps_per_block +
                                     threadIdx.y;
             local_row_result[local_row_idx] +=
-                x_cached * mtx(global_row, global_col);
+                (global_row < mtx.length(0))
+                    ? x_cached * mtx(global_row, global_col)
+                    : ar_type{0};
         }
     }
     if (threadIdx.x == 0 && threadIdx.y == 0) {
@@ -700,14 +704,18 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         const int row = threadIdx.x;
         const std::int64_t x_idx = row_block_idx * swarp_size + row;
         // compute the local x and distribute it via shfl
-        const ar_type local_x = x(x_idx, 0) - x_correction[row];
+        const ar_type local_x = (x_idx < x.length(0))
+                                    ? x(x_idx, 0) - x_correction[row]
+                                    : ar_type{0};
         ar_type local_solution{};
         for (int col = 0; col < swarp_size; ++col) {
             // GEMV
             local_solution +=
                 triang[col * triang_stride + row] * swarp.shfl(local_x, col);
         }
-        x(x_idx, 0) = local_solution;
+        if (x_idx < x.length(0)) {
+            x(x_idx, 0) = local_solution;
+        }
         __threadfence();
         if (threadIdx.x == 0) {
             *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
