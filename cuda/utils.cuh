@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #define CUDA_CALL(call)                                                  \
     do {                                                                 \
@@ -22,9 +23,10 @@
     do {                                                                  \
         auto err = call;                                                  \
         if (err != CUBLAS_STATUS_SUCCESS) {                               \
-            std::cerr << "Cuda error in file " << __FILE__                \
+            std::cerr << "CuBLAS error in file " << __FILE__              \
                       << " L:" << __LINE__ << "; Error: " << err << '\n'; \
-            throw std::runtime_error("Error");                            \
+            throw std::runtime_error(std::string("Error: ") +             \
+                                     std::to_string(err));                \
         }                                                                 \
     } while (false)
 
