@@ -487,9 +487,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                                     threadIdx.y;
             const std::int64_t mtx_idx =
                 global_row * m_info.stride + global_col;
-            local_row_result[local_row_idx] += (global_row < m_info.size[0])
-                                                   ? x_cached * mtx[mtx_idx]
-                                                   : ValueType{};
+            if (global_row < m_info.size[0]) {
+                local_row_result[local_row_idx] += x_cached * mtx[mtx_idx];
+            }
         }
     }
     if (threadIdx.x == 0 && threadIdx.y == 0) {
@@ -678,10 +678,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
             const auto global_row = row_block_idx * swarp_size +
                                     local_row_idx * swarps_per_block +
                                     threadIdx.y;
-            local_row_result[local_row_idx] +=
-                (global_row < mtx.length(0))
-                    ? x_cached * mtx(global_row, global_col)
-                    : ar_type{0};
+            if (global_row < mtx.length(0)) {
+                local_row_result[local_row_idx] +=
+                    x_cached * mtx(global_row, global_col);
+            }
         }
     }
     if (threadIdx.x == 0 && threadIdx.y == 0) {
