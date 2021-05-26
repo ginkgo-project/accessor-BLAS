@@ -403,9 +403,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     // All threads: load triangular matrix into shared memory
     // Note: Read it coalesced and transpose it.
     //       L is stored in column major for fast updates
-    for (int row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
+    for (index_type row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
-        const auto col = threadIdx.x;
+        const index_type col = threadIdx.x;
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
@@ -464,7 +464,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     volatile std::int32_t *last_finished_col =
         reinterpret_cast<std::int32_t *>(idx_helper);
 
-    constexpr int num_local_rows = swarp_size / swarps_per_block;
+    constexpr index_type num_local_rows = swarp_size / swarps_per_block;
     ValueType local_row_result[num_local_rows] = {};
     for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
         const index_type global_col = col_block * swarp_size + threadIdx.x;
@@ -506,7 +506,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
 
     // Solve triangular system with GEMV (since triang. sys. is inverted)
     if (threadIdx.y == 0) {
-        const int row = threadIdx.x;
+        const index_type row = threadIdx.x;
         const index_type x_idx =
             (row_block_idx * swarp_size + row) * x_info.stride;
         // compute the local x and distribute it via shfl
@@ -593,9 +593,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     // All threads: load triangular matrix into shared memory
     // Note: Read it coalesced and transpose it.
     //       L is stored in column major for fast updates
-    for (int row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
+    for (index_type row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
-        const auto col = threadIdx.x;
+        const index_type col = threadIdx.x;
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
@@ -654,7 +654,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     volatile std::int32_t *last_finished_col =
         reinterpret_cast<std::int32_t *>(idx_helper);
 
-    constexpr int num_local_rows = swarp_size / swarps_per_block;
+    constexpr index_type num_local_rows = swarp_size / swarps_per_block;
     ar_type local_row_result[num_local_rows] = {};
     for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
         const index_type global_col = col_block * swarp_size + threadIdx.x;
@@ -694,7 +694,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
 
     // Solve triangular system with GEMV (since triang. sys. is inverted)
     if (threadIdx.y == 0) {
-        const int row = threadIdx.x;
+        const index_type row = threadIdx.x;
         const index_type x_idx = row_block_idx * swarp_size + row;
         // compute the local x and distribute it via shfl
         const ar_type local_x = (x_idx < x.length(0))
