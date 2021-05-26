@@ -220,7 +220,7 @@ template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     const matrix_info m_info, const ValueType *__restrict__ mtx,
     const matrix_info x_info, ValueType *__restrict__ x,
-    std::uint32_t *idx_helper) {
+    std::uint32_t *col_row_global_helper) {
     static_assert(swarp_size <= WARP_SIZE,
                   "Subwarp size must be smaller than the WARP_SIZE");
     static_assert((swarp_size & (swarp_size - 1)) == 0,
@@ -241,7 +241,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
 
     const auto group = cg::this_thread_block();
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx = atomicInc(idx_helper + 1, ~std::uint32_t{0});
+        *shared_row_block_idx =
+            atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
     const std::int64_t row_block_idx = *shared_row_block_idx;
@@ -266,9 +267,9 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
                 : mtx[global_row * m_info.stride + global_col];
     }
     group.sync();
-    // TODO maybe change type of idx_helper
+    // TODO maybe change type of col_row_global_helper
     volatile std::int32_t *last_finished_col =
-        reinterpret_cast<std::int32_t *>(idx_helper);
+        reinterpret_cast<std::int32_t *>(col_row_global_helper);
 
     constexpr int num_local_rows = swarp_size / swarps_per_block;
     ValueType local_row_result[num_local_rows] = {};
@@ -371,7 +372,7 @@ template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     const matrix_info m_info, const ValueType *__restrict__ mtx,
     const matrix_info x_info, ValueType *__restrict__ x,
-    std::uint32_t *idx_helper) {
+    std::uint32_t *col_row_global_helper) {
     static_assert(swarp_size <= WARP_SIZE,
                   "Subwarp size must be smaller than the WARP_SIZE");
     static_assert((swarp_size & (swarp_size - 1)) == 0,
@@ -391,7 +392,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx = atomicInc(idx_helper + 1, ~std::uint32_t{0});
+        *shared_row_block_idx =
+            atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
     const index_type row_block_idx = *shared_row_block_idx;
@@ -403,7 +405,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     // All threads: load triangular matrix into shared memory
     // Note: Read it coalesced and transpose it.
     //       L is stored in column major for fast updates
-    for (index_type row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
+    for (index_type row = threadIdx.y; row < swarp_size;
+         row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
         const index_type col = threadIdx.x;
         const index_type global_row = row_block_idx * swarp_size + row;
@@ -460,10 +463,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
     }
     group.sync();
 
-    // TODO maybe change type of idx_helper
-    volatile std::int32_t *last_finished_col =
-        reinterpret_cast<std::int32_t *>(idx_helper);
-
     constexpr index_type num_local_rows = swarp_size / swarps_per_block;
     ValueType local_row_result[num_local_rows] = {};
     for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
@@ -472,7 +471,12 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         // Wait until result is known for current column block
         // Maybe add __nanosleep(200) to ensure it is yielded
         if (threadIdx.x == 0 && threadIdx.y == 0) {
-            while (*last_finished_col < col_block) {
+            // Note: this needs to be signed since the initial value is
+            //       ~0 (all ones)
+            volatile auto *last_col = reinterpret_cast<std::make_signed_t<
+                std::remove_pointer_t<decltype(col_row_global_helper)>> *>(
+                col_row_global_helper);
+            while (*last_col < col_block) {
             }
         }
         group.sync();
@@ -524,7 +528,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         }
         __threadfence();
         if (threadIdx.x == 0) {
-            *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
+            col_row_global_helper[0] =
+                static_cast<std::uint32_t>(row_block_idx);
         }
     }
 }
@@ -560,7 +565,7 @@ template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename MtxAccessor, typename VecAccessor>
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     gko::acc::range<MtxAccessor> mtx, gko::acc::range<VecAccessor> x,
-    std::uint32_t *idx_helper) {
+    std::uint32_t *col_row_global_helper) {
     static_assert(swarp_size <= WARP_SIZE,
                   "Subwarp size must be smaller than the WARP_SIZE");
     static_assert((swarp_size & (swarp_size - 1)) == 0,
@@ -581,7 +586,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx = atomicInc(idx_helper + 1, ~std::uint32_t{0});
+        *shared_row_block_idx =
+            atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
     const index_type row_block_idx = *shared_row_block_idx;
@@ -593,7 +599,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     // All threads: load triangular matrix into shared memory
     // Note: Read it coalesced and transpose it.
     //       L is stored in column major for fast updates
-    for (index_type row = threadIdx.y; row < swarp_size; row += swarps_per_block) {
+    for (index_type row = threadIdx.y; row < swarp_size;
+         row += swarps_per_block) {
         // threadIdx.x stores the column here to read coalesced
         const index_type col = threadIdx.x;
         const index_type global_row = row_block_idx * swarp_size + row;
@@ -650,10 +657,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     }
     group.sync();
 
-    // TODO maybe change type of idx_helper
-    volatile std::int32_t *last_finished_col =
-        reinterpret_cast<std::int32_t *>(idx_helper);
-
     constexpr index_type num_local_rows = swarp_size / swarps_per_block;
     ar_type local_row_result[num_local_rows] = {};
     for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
@@ -662,7 +665,12 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         // Wait until result is known for current column block
         // Maybe add __nanosleep(200) to ensure it is yielded
         if (threadIdx.x == 0 && threadIdx.y == 0) {
-            while (*last_finished_col < col_block) {
+            // Note: this needs to be signed since the initial value is
+            //       ~0 (all ones)
+            volatile auto *last_col = reinterpret_cast<std::make_signed_t<
+                std::remove_pointer_t<decltype(col_row_global_helper)>> *>(
+                col_row_global_helper);
+            while (*last_col < col_block) {
             }
         }
         group.sync();
@@ -711,8 +719,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
             x(x_idx, 0) = local_solution;
         }
         __threadfence();
+
         if (threadIdx.x == 0) {
-            *last_finished_col = static_cast<std::uint32_t>(row_block_idx);
+            col_row_global_helper[0] =
+                static_cast<std::uint32_t>(row_block_idx);
         }
     }
 }
