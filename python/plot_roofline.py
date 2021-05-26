@@ -267,7 +267,8 @@ plot_dict_list = [
         {
             #"file": "./results/20210526_1131_a100_trsv_time_ms.csv",
             #"file": "./results/20210526_1148_a100_trsv_time_ms.csv",
-            "file": "./results/20210526_1833_a100_trsv_time_ms.csv",
+            #"file": "./results/20210526_1833_a100_trsv_time_ms.csv",
+            "file": "./results/20210526_2025_a100_trsv_time_ms.csv",
             "header_trans": h_dict_trsv_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -284,7 +285,8 @@ plot_dict_list = [
         {
             #"file": "./results/20210526_1131_a100_trsv_error.csv",
             #"file": "./results/20210526_1148_a100_trsv_error.csv",
-            "file": "./results/20210526_1833_a100_trsv_error.csv",
+            #"file": "./results/20210526_1833_a100_trsv_error.csv",
+            "file": "./results/20210526_2025_a100_trsv_error.csv",
             "header_trans": h_dict_trsv_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
