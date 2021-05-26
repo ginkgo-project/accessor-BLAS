@@ -260,7 +260,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
         const std::int64_t global_row = row_block_idx * swarp_size + row;
         const std::int64_t global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row || row < col ||
+            ((dmtx == dmtx_t::unit && col == row) || row < col ||
              global_row >= m_info.size[0])
                 ? ValueType{1}
                 : mtx[global_row * m_info.stride + global_col];
@@ -466,7 +466,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
 
     constexpr int num_local_rows = swarp_size / swarps_per_block;
     ValueType local_row_result[num_local_rows] = {};
-    for (int col_block = 0; col_block < row_block_idx; ++col_block) {
+    for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
         const index_type global_col = col_block * swarp_size + threadIdx.x;
 
         // Wait until result is known for current column block
@@ -476,6 +476,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
             }
         }
         group.sync();
+
         const auto x_cached = x[global_col * x_info.stride];
         const index_type end_local_row_idx =
             (m_info.size[0] - 1 - row_block_idx * swarp_size - threadIdx.y) /
@@ -485,7 +486,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
              ++local_row_idx) {
             const index_type global_row = row_block_idx * swarp_size +
                                           threadIdx.y +
-                                          +local_row_idx * swarps_per_block;
+                                          local_row_idx * swarps_per_block;
             // Bound check necessary, we could be at the bottom of the matrix
             if (local_row_idx <= end_local_row_idx) {
                 local_row_result[local_row_idx] +=
@@ -655,7 +656,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
 
     constexpr int num_local_rows = swarp_size / swarps_per_block;
     ar_type local_row_result[num_local_rows] = {};
-    for (int col_block = 0; col_block < row_block_idx; ++col_block) {
+    for (index_type col_block = 0; col_block < row_block_idx; ++col_block) {
         const index_type global_col = col_block * swarp_size + threadIdx.x;
 
         // Wait until result is known for current column block
