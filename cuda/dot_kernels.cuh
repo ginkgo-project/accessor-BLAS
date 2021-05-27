@@ -27,8 +27,11 @@ __global__ __launch_bounds__(block_size) void dot(
     const std::int32_t n, const ValueType *__restrict__ x,
     const std::int32_t x_stride, const ValueType *__restrict__ y,
     const std::int32_t y_stride, ValueType *__restrict__ res) {
-    const std::int32_t start = blockIdx.x * blockDim.x + threadIdx.x;
-    const std::int32_t increment = blockDim.x * gridDim.x;
+    // Here, using int32 is fine since input & stride are also in int32
+    using index_type = std::int32_t;
+
+    const index_type start = blockIdx.x * blockDim.x + threadIdx.x;
+    const index_type increment = blockDim.x * gridDim.x;
 
     ValueType local_result{};
     const auto group = cg::this_thread_block();
@@ -39,7 +42,7 @@ __global__ __launch_bounds__(block_size) void dot(
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
 
-    for (std::int32_t idx = start; idx < n; idx += increment) {
+    for (index_type idx = start; idx < n; idx += increment) {
         const auto x_val = x[idx * x_stride];
         const auto y_val = y[idx * y_stride];
         local_result += x_val * y_val;
@@ -58,10 +61,13 @@ template <std::int64_t block_size, typename XRange, typename YRange,
 __global__ __launch_bounds__(block_size) void acc_dot(
     XRange x, YRange y, ArType *__restrict__ res) {
     using ar_type = decltype(x(0, 0) + x(0, 0));
+    // Here, using int64 results in better performance since the stride in the
+    // accessors is stored in uint64
+    using index_type = std::int64_t;
     static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
 
-    const std::int32_t start = blockIdx.x * blockDim.x + threadIdx.x;
-    const std::int32_t increment = blockDim.x * gridDim.x;
+    const index_type start = blockIdx.x * blockDim.x + threadIdx.x;
+    const index_type increment = blockDim.x * gridDim.x;
 
     ar_type local_result{};
     const auto group = cg::this_thread_block();
@@ -72,7 +78,7 @@ __global__ __launch_bounds__(block_size) void acc_dot(
     __shared__ char shared_impl[sizeof(ar_type) * block_size];
     auto shared = reinterpret_cast<ar_type *>(shared_impl);
 
-    for (std::int32_t idx = start; idx < x.length(0); idx += increment) {
+    for (index_type idx = start; idx < x.length(0); idx += increment) {
         local_result += x(idx, 0) * y(idx, 0);
     }
     shared[local_id] = local_result;
