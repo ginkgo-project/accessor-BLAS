@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     using value_type = ar_type;
     //*/
 
-    constexpr std::size_t max_size{512 * 1024 * 1024};
+    constexpr std::size_t max_size{535 * 1000 * 1000};
     // constexpr std::size_t max_size{128 * 1024 * 1024};
     constexpr char DELIM{';'};
 
@@ -43,7 +43,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     std::default_random_engine rengine(42);
-    // std::uniform_real_distribution<value_type> vector_dist(-100.0, 100.0);
     /*
     std::uniform_real_distribution<value_type> value_dist(1.0, 2.0);
     std::uniform_int_distribution<int> sign_dist(0, 1);
@@ -52,8 +51,8 @@ int main(int argc, char **argv) {
     value_dist(engine);
     };
     /*/
-    // std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
-    std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
+    // std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
     //*/
 
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
@@ -167,7 +166,7 @@ int main(int argc, char **argv) {
             ar_data.copy_cpu_to_gpu();
             st_data.convert_from(ar_data);
         }
-        for (std::size_t vec_size = start, i = 0; vec_size < max_size;
+        for (std::size_t vec_size = start, i = 0; vec_size <= max_size;
              vec_size += row_incr, ++i) {
             benchmark_vec_size.at(i) = vec_size;
             const matrix_info x_info{{vec_size, 1}};
