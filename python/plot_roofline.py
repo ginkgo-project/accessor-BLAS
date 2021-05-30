@@ -131,22 +131,27 @@ plot_detail_dict = {
     "fp64": {
         "label": "fp64",
         "color": myred,
+        "zorder": 3,
         },
     "fp32": {
         "label": "fp32",
         "color": mygreen,
+        "zorder": 4,
         },
     "acc_mix": {
         "label": "Accessor<fp64, fp32>",
         "color": myblue,
+        "zorder": 5,
         },
     "cublas_fp64": {
         "label": "cuBLAS fp64",
         "color": myorange,
+        "zorder": 6,
         },
     "cublas_fp32": {
         "label": "cuBLAS fp32",
         "color": mymagenta,
+            "zorder": 7,
         },
     }
 
@@ -408,18 +413,22 @@ plot_dict_list = [
                 "fp64_1": {
                     "label": "fp64 multi-kernel",
                     "color": myred,
+                    "zorder": 3,
                     },
                 "fp64_2": {
                     "label": "fp64 single kernel",
                     "color": mygreen,
+                    "zorder": 4,
                     },
                 "fp64_3": {
                     "label": "fp64 inverse L",
                     "color": myblue,
+                    "zorder": 5,
                     },
                 "cublas_fp64": {
                     "label": "cuBLAS fp64",
                     "color": myorange,
+                    "zorder": 6,
                     },
                 },
             "plot_name": "trsv_progress_flops",
@@ -533,7 +542,7 @@ if __name__ == "__main__":
             info = plot_info["plot_detail"][name]
             ax.plot(plot_data["size"], plot_data[name], label=plot_info["label_prefix"]+info["label"],
                     marker='', color=info["color"], linewidth=PlotLineWidth,
-                    markersize=MarkerSize)
+                    markersize=MarkerSize, zorder=info["zorder"])
         if "xlim" in plot_info:
             ax.set_xlim(**plot_info["xlim"])
         if "ylim" in plot_info:
