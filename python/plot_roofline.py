@@ -122,7 +122,8 @@ LabelFontSize = 15
 AxisTickSize = 12
 
 PlotLineWidth = 3
-MarkerSize = 8
+MarkerSize = 10
+TotalMarkerPerPlot = 5
 
 plot_order_flops = ["fp64", "fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
 plot_order_error = ["fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
@@ -131,27 +132,32 @@ plot_detail_dict = {
     "fp64": {
         "label": "fp64",
         "color": myred,
-        "zorder": 3,
+        "marker": 'X',
+        "zorder": 3.1,
         },
     "fp32": {
         "label": "fp32",
         "color": mygreen,
-        "zorder": 4,
+        "marker": 'P',
+        "zorder": 3.2,
         },
     "acc_mix": {
         "label": "Accessor<fp64, fp32>",
         "color": myblue,
-        "zorder": 5,
+        "marker": 'x',
+        "zorder": 3.3,
         },
     "cublas_fp64": {
         "label": "cuBLAS fp64",
         "color": myorange,
-        "zorder": 6,
+        "marker": 'd',
+        "zorder": 3.4,
         },
     "cublas_fp32": {
         "label": "cuBLAS fp32",
         "color": mymagenta,
-            "zorder": 7,
+        "marker": '+',
+        "zorder": 3.5,
         },
     }
 
@@ -413,22 +419,26 @@ plot_dict_list = [
                 "fp64_1": {
                     "label": "fp64 multi-kernel",
                     "color": myred,
-                    "zorder": 3,
+                    "marker": "",
+                    "zorder": 3.1,
                     },
                 "fp64_2": {
                     "label": "fp64 single kernel",
                     "color": mygreen,
-                    "zorder": 4,
+                    "marker": "",
+                    "zorder": 3.2,
                     },
                 "fp64_3": {
                     "label": "fp64 inverse L",
                     "color": myblue,
-                    "zorder": 5,
+                    "marker": "",
+                    "zorder": 3.3,
                     },
                 "cublas_fp64": {
                     "label": "cuBLAS fp64",
                     "color": myorange,
-                    "zorder": 6,
+                    "marker": "",
+                    "zorder": 3.4,
                     },
                 },
             "plot_name": "trsv_progress_flops",
@@ -538,11 +548,15 @@ if __name__ == "__main__":
 
         ax.set_xlabel(plot_info["xlabel"], fontsize=LabelFontSize)
         ax.set_ylabel(plot_info["ylabel"], fontsize=LabelFontSize)
+        marker_start = 0
+        marker_every = int(len(plot_data["size"]) / TotalMarkerPerPlot)
+        marker_diff = int(marker_every / len(plot_info["plot_order"]))
         for name in plot_info["plot_order"]:
             info = plot_info["plot_detail"][name]
             ax.plot(plot_data["size"], plot_data[name], label=plot_info["label_prefix"]+info["label"],
-                    marker='', color=info["color"], linewidth=PlotLineWidth,
-                    markersize=MarkerSize, zorder=info["zorder"])
+                    marker=info["marker"], color=info["color"], linewidth=PlotLineWidth,
+                    markersize=MarkerSize, zorder=info["zorder"], markevery=(marker_start, marker_every))
+            marker_start = marker_start + marker_diff
         if "xlim" in plot_info:
             ax.set_xlim(**plot_info["xlim"])
         if "ylim" in plot_info:
