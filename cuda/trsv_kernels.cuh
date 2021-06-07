@@ -412,12 +412,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ValueType{1}
-                : (col <= row && global_row < m_info.size[0] &&
-                   global_col < m_info.size[1])
-                      ? mtx[global_row * m_info.stride + global_col]
-                      : ValueType{0};
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (col <= row && global_row < m_info.size[0] &&
+               global_col < m_info.size[1])
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -445,7 +444,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
             const int col = threadIdx.x;
             const auto diag_el = triang[diag_id * triang_stride + diag_id];
             for (int row = diag_id + 1; row < swarp_size; ++row) {
-                auto factor =
+                const auto factor =
                     -triang[diag_id * triang_stride + row];  // broadcast
                 const int triang_idx = col * triang_stride + row;
                 const auto triang_val = triang[triang_idx];
@@ -477,6 +476,175 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                 std::remove_pointer_t<decltype(col_row_global_helper)>> *>(
                 col_row_global_helper);
             while (*last_col < col_block) {
+            }
+        }
+        group.sync();
+
+        const auto x_cached = x[global_col * x_info.stride];
+        const index_type end_local_row_idx =
+            (m_info.size[0] - 1 - row_block_idx * swarp_size - threadIdx.y) /
+            swarps_per_block;
+#pragma unroll
+        for (index_type local_row_idx = 0; local_row_idx < num_local_rows;
+             ++local_row_idx) {
+            const index_type global_row = row_block_idx * swarp_size +
+                                          threadIdx.y +
+                                          local_row_idx * swarps_per_block;
+            // Bound check necessary, we could be at the bottom of the matrix
+            if (local_row_idx <= end_local_row_idx) {
+                local_row_result[local_row_idx] +=
+                    x_cached * mtx[global_row * m_info.stride + global_col];
+            }
+        }
+    }
+    group.sync();
+#pragma unroll
+    for (int local_row_idx = 0; local_row_idx < num_local_rows;
+         ++local_row_idx) {
+        x_correction[local_row_idx * swarps_per_block + threadIdx.y] =
+            reduce(swarp, local_row_result[local_row_idx],
+                   [](ValueType a, ValueType b) { return a + b; });
+    }
+    group.sync();
+
+    // Solve triangular system with GEMV (since triang. sys. is inverted)
+    if (threadIdx.y == 0) {
+        const index_type row = threadIdx.x;
+        const index_type x_idx =
+            (row_block_idx * swarp_size + row) * x_info.stride;
+        // compute the local x and distribute it via shfl
+        const ValueType local_x = (x_idx < x_info.size[0])
+                                      ? x[x_idx] - x_correction[row]
+                                      : ValueType{0};
+        ValueType local_solution{};
+        for (int col = 0; col < swarp_size; ++col) {
+            // GEMV
+            local_solution +=
+                triang[col * triang_stride + row] * swarp.shfl(local_x, col);
+        }
+        if (x_idx < x_info.size[0]) {
+            x[x_idx] = local_solution;
+        }
+        __threadfence();
+        if (threadIdx.x == 0) {
+            col_row_global_helper[0] =
+                static_cast<std::uint32_t>(row_block_idx);
+        }
+    }
+}
+
+// Must be called with 2-D blocks, and a 1-D grid
+template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
+          typename ValueType>
+__global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
+    const matrix_info m_info, const ValueType *__restrict__ mtx,
+    const matrix_info x_info, ValueType *__restrict__ x,
+    std::uint32_t *col_row_global_helper) {
+    static_assert(swarp_size <= WARP_SIZE,
+                  "Subwarp size must be smaller than the WARP_SIZE");
+    static_assert((swarp_size & (swarp_size - 1)) == 0,
+                  "swarp_size must be a power of 2");
+    static_assert(swarp_size % (swarps_per_block) == 0,
+                  "swarp_size must be a multiple of swarps_per_block");
+    // assert: blockDim.x == swarp_size; blockDim.y = swarps_per_block;
+    //         blockDim.z = 1
+    using index_type = std::int64_t;
+    constexpr int triang_stride = swarp_size + 1;
+
+    // stores the trianglular system in column major
+    __shared__ ValueType triang[swarp_size * triang_stride];
+    __shared__ std::uint32_t shared_row_block_idx[1];
+    __shared__ ValueType x_correction[swarp_size];
+
+    const auto group = cg::this_thread_block();
+    const auto swarp = cg::tiled_partition<swarp_size>(group);
+    if (threadIdx.x == 0 && threadIdx.y == 0) {
+        *shared_row_block_idx =
+            atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
+    }
+    group.sync();
+    const index_type row_block_idx = *shared_row_block_idx;
+
+    if (row_block_idx * swarp_size >= m_info.size[0]) {
+        return;
+    }
+
+    // All threads: load triangular matrix into shared memory
+    // Note: Read it coalesced and transpose it.
+    //       U is stored in column major for fast updates
+    for (index_type row = threadIdx.y; row < swarp_size;
+         row += swarps_per_block) {
+        // threadIdx.x stores the column here to read coalesced
+        const index_type col = threadIdx.x;
+        const index_type global_row =
+            m_info.size[0] - 1 - (row_block_idx + 1) * swarp_size + row;
+        const index_type global_col =
+            m_info.size[1] - 1 - (row_block_idx + 1) * swarp_size + col;
+        triang[col * triang_stride + row] =
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (row <= col && 0 <= global_row && 0 <= global_col)
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
+    }
+    group.sync();
+    // Invert lower triangular matrix
+
+    // First: make diagonals 1
+    if (dmtx == dmtx_t::non_unit) {
+        if (threadIdx.y == 0) {
+            for (int row = swarp_size; row >= 0; --row) {
+                const int col = threadIdx.x;
+                const auto triang_idx = col * triang_stride + row;
+                const auto local_val = triang[triang_idx];
+                const auto diag_el = ValueType{1} / swarp.shfl(local_val, row);
+                if (row <= col) {
+                    triang[triang_idx] =
+                        (row == col) ? diag_el : local_val * diag_el;
+                }
+            }
+        }
+    }
+    // No need to sync since the same warp will continue to compute
+
+    if (threadIdx.y == 0) {
+        // Compute remaining inverse in-place (with Gauss-Jordan elimination)
+        for (int diag_id = swarp_size; diag_id >= 0; --diag_id) {
+            const int col = threadIdx.x;
+            const auto diag_el = triang[diag_id * triang_stride + diag_id];
+            for (int row = diag_id - 1; row >= 0; --row) {
+                const auto factor =
+                    -triang[diag_id * triang_stride + row];  // broadcast
+                const int triang_idx = col * triang_stride + row;
+                const auto triang_val = triang[triang_idx];
+                if (row < col) {
+                    triang[triang_idx] =
+                        (col == diag_id)
+                            ? factor * diag_el
+                            : triang_val +
+                                  factor *
+                                      triang[col * triang_stride + diag_id];
+                }
+                swarp.sync();
+            }
+        }
+    }
+    group.sync();
+
+    constexpr index_type num_local_rows = swarp_size / swarps_per_block;
+    ValueType local_row_result[num_local_rows] = {};
+    for (index_type col_block = 1; col_block <= row_block_idx; ++col_block) {
+        const index_type global_col =
+            m_info.size[1] - 1 - (col_block * swarp_size) + threadIdx.x;
+
+        // Wait until result is known for current column block
+        // Maybe add __nanosleep(200) to ensure it is yielded
+        if (threadIdx.x == 0 && threadIdx.y == 0) {
+            // Note: this needs to be signed since the initial value is
+            //       ~0 (all ones)
+            volatile auto *last_col = reinterpret_cast<std::make_signed_t<
+                std::remove_pointer_t<decltype(col_row_global_helper)>> *>(
+                col_row_global_helper);
+            while (*last_col < col_block - 1) {
             }
         }
         group.sync();
@@ -606,12 +774,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ar_type{1}
-                : (col <= row && global_row < mtx.length(0) &&
-                   global_col < mtx.length(1))
-                      ? mtx(global_row, global_col)
-                      : ar_type{0};
+            (dmtx == dmtx_t::unit && col == row) ? ar_type{1}
+            : (col <= row && global_row < mtx.length(0) &&
+               global_col < mtx.length(1))
+                ? mtx(global_row, global_col)
+                : ar_type{0};
     }
     group.sync();
     // Invert lower triangular matrix
