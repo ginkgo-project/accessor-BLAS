@@ -46,7 +46,7 @@ struct matrix_info {
 
 template <typename ValueType>
 constexpr ValueType ceildiv(ValueType a, ValueType b) {
-    return (a - 1) / b + 1;
+    return (a <= 0) ? a / b : (a - 1) / b + 1;
 }
 
 ///////////// GPU relevant code \\\\\\\\\\\\\

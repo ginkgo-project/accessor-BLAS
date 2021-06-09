@@ -655,6 +655,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
         __threadfence();
 
         const auto x_cached = x[global_col * x_info.stride];
+        const index_type start_local_row_idx =
+            ceildiv(-static_cast<index_type>(m_info.size[0]) +
+             (row_block_idx + 1) * swarp_size - threadIdx.y,
+            static_cast<index_type>(swarps_per_block));
 #pragma unroll
         for (index_type local_row_idx = 0; local_row_idx < num_local_rows;
              ++local_row_idx) {
@@ -662,7 +666,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
                 m_info.size[0] - (row_block_idx + 1) * swarp_size +
                 threadIdx.y + local_row_idx * swarps_per_block;
             // Bound check necessary, we could be at the top of the matrix
-            if (0 <= global_row) {
+            if (start_local_row_idx <= local_row_idx) {
                 local_row_result[local_row_idx] +=
                     x_cached * mtx[global_row * m_info.stride + global_col];
             }
@@ -1032,6 +1036,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
         __threadfence();
 
         const ar_type x_cached = x(global_col, 0);
+        const index_type start_local_row_idx =
+            ceildiv(-static_cast<index_type>(mtx.length(0)) +
+             (row_block_idx + 1) * swarp_size - threadIdx.y,
+            static_cast<index_type>(swarps_per_block));
 #pragma unroll
         for (index_type local_row_idx = 0; local_row_idx < num_local_rows;
              ++local_row_idx) {
@@ -1039,7 +1047,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
                 mtx.length(0) - (row_block_idx + 1) * swarp_size + threadIdx.y +
                 local_row_idx * swarps_per_block;
             // Bound check necessary, we could be at the top of the matrix
-            if (0 <= global_row) {
+            if (start_local_row_idx <= local_row_idx) {
                 local_row_result[local_row_idx] +=
                     x_cached * mtx(global_row, global_col);
             }
