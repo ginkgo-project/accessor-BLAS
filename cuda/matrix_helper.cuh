@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <ios>
 #include <iostream>
 #include <stdexcept>
 
@@ -79,6 +80,13 @@ void convert_mtx(const matrix_info &info, const InputType *input,
 
 template <typename ValueType>
 void print_mtx(const matrix_info &info, const ValueType *vec) {
+    // std::ios old_state{nullptr};
+    // old_state.copyfmt(std::cout);
+    auto cout_flags = std::cout.flags(); // used to undo std::fixed
+    auto old_prec = std::cout.precision();
+    std::cout.precision(3);
+    // showpos: show + sign for positive numbers
+    std::cout << std::fixed << std::showpos;
     for (std::size_t i = 0; i < info.size[0]; ++i) {
         for (std::size_t j = 0; j < info.size[1]; ++j) {
             const auto idx = i * info.stride + j;
@@ -86,5 +94,10 @@ void print_mtx(const matrix_info &info, const ValueType *vec) {
         }
         std::cout << '\n';
     }
+    //Does not copy some, like precision info
+    std::cout.flags(cout_flags); 
+    std::cout.precision(old_prec);
+    // apparently can throw exceptions since `old_state` is not properly initialized
+    //std::cout.copyfmt(old_state); 
 }
 
