@@ -85,8 +85,13 @@ int main(int argc, char **argv) {
     using value_type = ar_type;
     //*/
 
+    /*
     constexpr tmtx_t t_matrix_type = tmtx_t::lower;
     constexpr dmtx_t d_matrix_type = dmtx_t::non_unit;
+    /*/
+    constexpr tmtx_t t_matrix_type = tmtx_t::upper;
+    constexpr dmtx_t d_matrix_type = dmtx_t::unit;
+    //*/
 
     bool measure_error{false};
 
@@ -98,8 +103,8 @@ int main(int argc, char **argv) {
         std::cerr << "Unsupported parameters!\n";
         std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
         std::cerr << "With " << use_error_string
-                  << ":    compute error of GeMVs\n"
-                  << "Without parameters: benchmark different GeMVs\n";
+                  << ":    compute error of TRSVs\n"
+                  << "Without parameters: benchmark different TRSVs\n";
         return 1;
     }
 
