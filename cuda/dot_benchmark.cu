@@ -7,7 +7,6 @@
 #include <random>
 #include <type_traits>
 
-//#include "../error_tobias.hpp"
 #include "dot_kernels.cuh"
 #include "dot_memory.cuh"
 #include "memory.cuh"
@@ -43,15 +42,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     std::default_random_engine rengine(42);
-    /*
-    std::uniform_real_distribution<value_type> value_dist(1.0, 2.0);
-    std::uniform_int_distribution<int> sign_dist(0, 1);
-    auto vector_dist = [&value_dist, &sign_dist](auto &&engine) -> value_type{
-        return static_cast<bool>(sign_dist(engine)) ? -value_dist(engine) :
-    value_dist(engine);
-    };
-    /*/
+    //*
     std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
+    /*/
     // std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
     //*/
 
@@ -64,78 +57,80 @@ int main(int argc, char **argv) {
     cudaDeviceProp device_prop;
     CUDA_CALL(cudaGetDeviceProperties(&device_prop, 0));
     // std::cout << "Number SMs: " << device_prop.multiProcessorCount << '\n';
-    constexpr std::size_t benchmark_num{6};
-    constexpr std::size_t benchmark_reference{0};
-    std::array<std::string, benchmark_num> header_strings_time = {
-        "DOT fp64",
-        "DOT fp32",
-        "DOT Acc<fp64, fp64>",
-        "DOT Acc<fp64, fp32>",
-        "CUBLAS DOT fp64",
-        "CUBLAS DOT fp32"};
-    std::array<std::string, benchmark_num> header_strings_error;
-    for (std::size_t i = 0; i < header_strings_time.size(); ++i) {
-        header_strings_error[i] =
-            std::string("Error ") + header_strings_time[i];
-    }
 
-    std::array<std::function<void(matrix_info, matrix_info)>, benchmark_num>
-        benchmark_lambdas = {
-            [&](matrix_info x_info, matrix_info y_info) {
-                dot(device_prop, x_info, ar_data.gpu_x(), y_info,
-                    ar_data.gpu_y(), ar_data.gpu_res());
-            },
-            [&](matrix_info x_info, matrix_info y_info) {
-                dot(device_prop, x_info, st_data.gpu_x(), y_info,
-                    st_data.gpu_y(), st_data.gpu_res());
-            },
-            [&](matrix_info x_info, matrix_info y_info) {
-                acc_dot(device_prop, x_info, ar_data.gpu_x(), y_info,
-                        ar_data.gpu_y(), ar_data.gpu_res());
-            },
-            [&](matrix_info x_info, matrix_info y_info) {
-                acc_dot(device_prop, x_info, st_data.gpu_x(), y_info,
-                        st_data.gpu_y(), ar_data.gpu_res());
-            },
-            [&](matrix_info x_info, matrix_info y_info) {
-                cublas_dot(cublas_handle.get(), x_info, ar_data.gpu_x(), y_info,
-                           ar_data.gpu_y(), ar_data.gpu_res());
-            },
-            [&](matrix_info x_info, matrix_info y_info) {
-                cublas_dot(cublas_handle.get(), x_info, st_data.gpu_x(), y_info,
-                           st_data.gpu_y(), st_data.gpu_res());
-            }};
+    auto ar_get_result = [&ar_data]() { return ar_data.get_result(); };
+    auto st_get_result = [&st_data]() {
+        return static_cast<ar_type>(st_data.get_result());
+    };
 
-    std::array<std::function<value_type()>, benchmark_num> benchmark_get_error =
-        {[&]() {
-            return ar_data.get_result(); },
-         [&]() {
-            return st_data.get_result(); },
-         [&]() {
-            return ar_data.get_result(); },
-         [&]() {
-            return ar_data.get_result(); },
-         [&]() {
-            return ar_data.get_result(); },
-         [&]() {
-            return st_data.get_result(); }};
+    constexpr std::size_t benchmark_num{7};
+    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
+    using benchmark_info_t =
+        std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
+                   std::function<value_type()>>;
+    std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+        benchmark_info_t{"DOT fp64",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             dot(device_prop, x_info, ar_data.gpu_x(), y_info,
+                                 ar_data.gpu_y(), ar_data.gpu_res());
+                         },
+                         ar_get_result},
+        benchmark_info_t{"DOT fp32",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             dot(device_prop, x_info, st_data.gpu_x(), y_info,
+                                 st_data.gpu_y(), st_data.gpu_res());
+                         },
+                         st_get_result},
+        benchmark_info_t{"DOT Acc<fp64, fp64>",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             acc_dot(device_prop, x_info, ar_data.gpu_x(),
+                                     y_info, ar_data.gpu_y(),
+                                     ar_data.gpu_res());
+                         },
+                         ar_get_result},
+        benchmark_info_t{"DOT Acc<fp64, fp32>",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             acc_dot(device_prop, x_info, st_data.gpu_x(),
+                                     y_info, st_data.gpu_y(),
+                                     ar_data.gpu_res());
+                         },
+                         ar_get_result},
+        benchmark_info_t{"DOT Acc<fp32, fp32>",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             acc_dot(device_prop, x_info, st_data.gpu_x(),
+                                     y_info, st_data.gpu_y(),
+                                     st_data.gpu_res());
+                         },
+                         st_get_result},
+        benchmark_info_t{"CUBLAS DOT fp64",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             cublas_dot(cublas_handle.get(), x_info,
+                                        ar_data.gpu_x(), y_info,
+                                        ar_data.gpu_y(), ar_data.gpu_res());
+                         },
+                         ar_get_result},
+        benchmark_info_t{"CUBLAS DOT fp32",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             cublas_dot(cublas_handle.get(), x_info,
+                                        st_data.gpu_x(), y_info,
+                                        st_data.gpu_y(), st_data.gpu_res());
+                         },
+                         st_get_result}};
 
+    std::cout << "Vector Size";
     if (!detailed_error) {
-        std::cout << "Vector Size";
-        for (const auto &str : header_strings_time) {
-            std::cout << DELIM << str;
+        for (const auto &info : benchmark_info) {
+            std::cout << DELIM << std::get<0>(info);
         }
-        for (const auto &str : header_strings_error) {
-            std::cout << DELIM << str;
+        for (const auto &info : benchmark_info) {
+            std::cout << DELIM << "Error " << std::get<0>(info);
         }
-        std::cout << '\n';
     } else {
-        std::cout << "Vector Size";
-        for (const auto &str : header_strings_error) {
-            std::cout << DELIM << str;
+        for (const auto &info : benchmark_info) {
+            std::cout << DELIM << "Error " << std::get<0>(info);
         }
-        std::cout << '\n';
     }
+    std::cout << '\n';
 
     std::cout.precision(16);
     std::cout << std::scientific;
@@ -144,7 +139,6 @@ int main(int argc, char **argv) {
         return std::abs(res - ref_res) / std::abs(ref_res);
         // return std::abs(res);
     };
-    // constexpr std::size_t steps = 1024 - 1;
     constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
     constexpr std::size_t row_incr = 2'000'000;  // (max_size - start) / steps;
     constexpr std::size_t steps = (max_size - start) / row_incr;
@@ -172,20 +166,20 @@ int main(int argc, char **argv) {
             const matrix_info x_info{{vec_size, 1}};
             const matrix_info y_info{{vec_size, 1}};
 
-            std::array<value_type, benchmark_num> raw_error{};
+            std::array<value_type, benchmark_num> raw_result{};
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 const std::size_t idx = i * benchmark_num + bi;
                 auto curr_lambda = [&]() {
-                    benchmark_lambdas[bi](x_info, y_info);
+                    std::get<1>(benchmark_info[bi])(x_info, y_info);
                 };
                 benchmark_time.at(idx) =
                     benchmark_function(curr_lambda, detailed_error);
-                raw_error[bi] = benchmark_get_error[bi]();
+                raw_result[bi] = std::get<2>(benchmark_info[bi])();
             }
-            const value_type result_ref = raw_error[benchmark_reference];
+            const value_type result_ref = raw_result[benchmark_reference];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 const std::size_t idx = i * benchmark_num + bi;
-                benchmark_error.at(idx) += get_error(raw_error[bi], result_ref);
+                benchmark_error.at(idx) += get_error(raw_result[bi], result_ref);
             }
         }
     }

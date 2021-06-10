@@ -13,12 +13,6 @@
 #include "memory.cuh"
 #include "utils.cuh"
 
-/*
-Idea: Add big for-loop in gemv-kernel, so a change in the grid still covers
-      all elements. It also allows each thread to have multiple rows to process.
-      It might not be necessary, since each thread already has multiple elements
-      to read (the columns), but it is worth a try.
-*/
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
     std::size_t end = info.size[0];
@@ -102,15 +96,15 @@ int main(int argc, char **argv) {
         std::cerr << "Unsupported parameters!\n";
         std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
         std::cerr << "With " << use_error_string
-                  << ":    compute error of GeMVs\n"
-                  << "Without parameters: benchmark different GeMVs\n";
+                  << ":    compute error of GEMVs\n"
+                  << "Without parameters: benchmark different GEMVs\n";
         return 1;
     }
 
     const bool reset_result{measure_error && ar_beta != 0};
     const bool normalize_error{true};
 
-    constexpr std::size_t max_rows{24 * 1024};
+    constexpr std::size_t max_rows{24500};
     // constexpr std::size_t max_rows{6500};
     // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
@@ -138,7 +132,7 @@ int main(int argc, char **argv) {
     auto st_cpu_res_init = st_data.cpu_res_memory();
     Memory<value_type> reduce_memory(Memory<ar_type>::Device::cpu,
                                      max_res_num_elems);
-    auto ar_compute_error = [&](const matrix_info &x_info) {
+    auto ar_compute_error = [&](matrix_info x_info) {
         value_type error{};
         if (measure_error) {
             ar_data.sync_result();
@@ -150,7 +144,7 @@ int main(int argc, char **argv) {
         }
         return error / res_ref_norm;
     };
-    auto st_compute_error = [&](const matrix_info &x_info) {
+    auto st_compute_error = [&](matrix_info x_info) {
         value_type error{};
         if (measure_error) {
             st_data.sync_result();
@@ -163,113 +157,128 @@ int main(int argc, char **argv) {
         return error / res_ref_norm;
     };
 
-    if (!measure_error) {
-        std::cout << "Num Rows" << DELIM << "GEMV fp64" << DELIM << "GEMV fp32"
-                  << DELIM << "GEMV Acc<fp64, fp64>" << DELIM
-                  << "GEMV Acc<fp64, fp32>" << DELIM << "CUBLAS GEMV fp64"
-                  << DELIM << "CUBLAS GEMV fp32" << '\n';
-    } else {
-        std::cout << "Num Rows" << DELIM << "Error GEMV fp64" << DELIM
-                  << "Error GEMV fp32" << DELIM << "Error GEMV Acc<fp64, fp64>"
-                  << DELIM << "Error GEMV Acc<fp64, fp32>" << DELIM
-                  << "Error CUBLAS GEMV fp64" << DELIM
-                  << "Error CUBLAS GEMV fp32" << '\n';
-    }
-
     std::cout.precision(16);
     std::cout << std::scientific;
 
+    constexpr std::size_t benchmark_num{7};
+    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
+    using benchmark_info_t =
+        std::tuple<std::string,
+                   std::function<void(matrix_info, matrix_info, matrix_info)>,
+                   std::function<value_type(matrix_info)>>;
+    std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+        benchmark_info_t{
+            "GEMV fp64",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                gemv(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
+                     ar_data.gpu_x_const(), res_info, ar_beta,
+                     ar_data.gpu_res());
+            },
+            ar_compute_error},
+        benchmark_info_t{
+            "GEMV fp32",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                gemv(m_info, st_alpha, st_data.gpu_mtx_const(), x_info,
+                     st_data.gpu_x_const(), res_info, st_beta,
+                     st_data.gpu_res());
+            },
+            st_compute_error},
+        benchmark_info_t{
+            "GEMV Acc<fp64, fp64>",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                acc_gemv<ar_type>(m_info, ar_alpha, ar_data.gpu_mtx_const(),
+                                  x_info, ar_data.gpu_x_const(), res_info,
+                                  ar_beta, ar_data.gpu_res());
+            },
+            ar_compute_error},
+        benchmark_info_t{
+            "GEMV Acc<fp64, fp32>",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                acc_gemv<ar_type>(m_info, st_alpha, st_data.gpu_mtx_const(),
+                                  x_info, st_data.gpu_x_const(), res_info,
+                                  st_beta, st_data.gpu_res());
+            },
+            st_compute_error},
+        benchmark_info_t{
+            "GEMV Acc<fp32, fp32>",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                acc_gemv<st_type>(m_info, st_alpha, st_data.gpu_mtx_const(),
+                                  x_info, st_data.gpu_x_const(), res_info,
+                                  st_beta, st_data.gpu_res());
+            },
+            st_compute_error},
+        benchmark_info_t{
+            "CUBLAS GEMV fp64",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                cublas_gemv(cublasHandle.get(), m_info, ar_alpha,
+                            ar_data.gpu_mtx_const(), x_info,
+                            ar_data.gpu_x_const(), res_info, ar_beta,
+                            ar_data.gpu_res());
+            },
+            ar_compute_error},
+        benchmark_info_t{
+            "CUBLAS GEMV fp32",
+            [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
+                cublas_gemv(cublasHandle.get(), m_info, st_alpha,
+                            st_data.gpu_mtx_const(), x_info,
+                            st_data.gpu_x_const(), res_info, st_beta,
+                            st_data.gpu_res());
+            },
+            st_compute_error},
+    };
+
+    std::cout << "Num rows";
+    for (const auto &info : benchmark_info) {
+        if (!measure_error) {
+            std::cout << DELIM << std::get<0>(info);
+        } else {
+            std::cout << DELIM << "Error " << std::get<0>(info);
+        }
+    }
+    std::cout << '\n';
+
+    std::cout.precision(16);
+    // showpos: show + sign for positive numbers
+    std::cout << std::scientific << std::showpos;
     constexpr auto start = 100;  // max_rows / 48;
-    // constexpr auto start = max_rows / 48;
     constexpr auto row_incr = start;  // start;
     for (std::size_t num_rows = start; num_rows <= max_rows;
          num_rows += row_incr) {
+        std::array<value_type, benchmark_num> local_res{};
         const matrix_info m_info{{num_rows, num_rows}, max_rows};
         const matrix_info x_info{{num_rows, 1}};
         const matrix_info res_info{{num_rows, 1}};
 
-        double ar_time{};
-        auto ar_func = [&]() {
-            gemv(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
-                 ar_data.gpu_x_const(), res_info, ar_beta, ar_data.gpu_res());
-        };
-        double st_time{};
-        auto st_func = [&]() {
-            gemv(m_info, st_alpha, st_data.gpu_mtx_const(), x_info,
-                 st_data.gpu_x_const(), res_info, st_beta, st_data.gpu_res());
-        };
-        double acc_ar_time{};
-        auto acc_ar_func = [&]() {
-            acc_gemv<ar_type>(m_info, ar_alpha, ar_data.gpu_mtx_const(), x_info,
-                              ar_data.gpu_x_const(), res_info, ar_beta,
-                              ar_data.gpu_res());
-        };
-        double acc_mix_time{};
-        auto acc_mix_func = [&]() {
-            acc_gemv<ar_type>(m_info, ar_alpha, st_data.gpu_mtx_const(), x_info,
-                              st_data.gpu_x_const(), res_info, ar_beta,
-                              st_data.gpu_res());
-        };
-        double cublas_ar_time{};
-        auto cublas_ar_func = [&]() {
-            cublas_gemv(cublasHandle.get(), m_info, ar_alpha,
-                        ar_data.gpu_mtx_const(), x_info, ar_data.gpu_x_const(),
-                        res_info, ar_beta, ar_data.gpu_res());
-        };
-        double cublas_st_time{};
-        auto cublas_st_func = [&]() {
-            cublas_gemv(cublasHandle.get(), m_info, st_alpha,
-                        st_data.gpu_mtx_const(), x_info, st_data.gpu_x_const(),
-                        res_info, st_beta, st_data.gpu_res());
-        };
-        value_type ar_error{};  // [[gnu::unused, maybe_unused]]
-        value_type st_error{};
-        value_type acc_ar_error{};
-        value_type acc_mix_error{};
-        value_type cublas_ar_error{};
-        value_type cublas_st_error{};
-
-        // control_gemv(m_info, v_matrix, x_info, v_b, v_res_ref);
-
-        ar_time = benchmark_function(ar_func, measure_error);
-        // Use the result here as the reference
         if (measure_error) {
+            std::get<1>(benchmark_info[benchmark_reference])(m_info, x_info,
+                                                             res_info);
             cpu_res_ref = ar_data.gpu_res_memory();
             if (normalize_error) {
                 res_ref_norm = reduce<value_type>(
                     res_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
                         return std::abs(a) + std::abs(b);
                     });
-                // copy again since reduce overwrites
+                // copy again since the reduce operation overwrites
                 cpu_res_ref = ar_data.gpu_res_memory();
+                ar_data.gpu_res_memory() = ar_cpu_res_init;
             }
         }
-        ar_error = ar_compute_error(x_info);
-
-        st_time = benchmark_function(st_func, measure_error);
-        st_error = st_compute_error(x_info);
-
-        acc_ar_time = benchmark_function(acc_ar_func, measure_error);
-        acc_ar_error = ar_compute_error(x_info);
-
-        acc_mix_time = benchmark_function(acc_mix_func, measure_error);
-        acc_mix_error = st_compute_error(x_info);
-
-        cublas_ar_time = benchmark_function(cublas_ar_func, measure_error);
-        cublas_ar_error = ar_compute_error(x_info);
-
-        cublas_st_time = benchmark_function(cublas_st_func, measure_error);
-        cublas_st_error = st_compute_error(x_info);
-
-        if (!measure_error) {
-            std::cout << num_rows << DELIM << ar_time << DELIM << st_time
-                      << DELIM << acc_ar_time << DELIM << acc_mix_time << DELIM
-                      << cublas_ar_time << DELIM << cublas_st_time << '\n';
-        } else {
-            std::cout << num_rows << DELIM << ar_error << DELIM << st_error
-                      << DELIM << acc_ar_error << DELIM << acc_mix_error
-                      << DELIM << cublas_ar_error << DELIM << cublas_st_error
-                      << '\n';
+        for (std::size_t i = 0; i < benchmark_num; ++i) {
+            auto local_func = [&]() {
+                std::get<1>(benchmark_info[i])(m_info, x_info, res_info);
+            };
+            if (!measure_error) {
+                local_res[i] = benchmark_function(local_func, measure_error);
+            } else {
+                benchmark_function(local_func, measure_error);
+                local_res[i] = std::get<2>(benchmark_info[i])(x_info);
+            }
         }
+
+        std::cout << num_rows;
+        for (const auto &res : local_res) {
+            std::cout << DELIM << res;
+        }
+        std::cout << '\n';
     }
 }
