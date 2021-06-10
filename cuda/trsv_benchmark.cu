@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
 
     constexpr std::size_t max_rows{24 * 1000};
     // constexpr std::size_t max_rows{8 * 1000};
-    // constexpr std::size_t max_rows{37};
+    // constexpr std::size_t max_rows{99};
     // constexpr std::size_t max_rows{10 * 1000};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     constexpr std::size_t start = std::min(max_rows, std::size_t{50});
     // constexpr std::size_t start = std::min(max_rows, std::size_t{1000});
     // constexpr auto start = max_rows / 48;
-    constexpr std::size_t row_incr = start;  // start;
+    constexpr std::size_t row_incr = start;
 
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
@@ -153,8 +153,6 @@ int main(int argc, char **argv) {
         ar_data.sync_x();
         error = compare(x_info, cpu_x_ref.const_data(), ar_data.cpu_x_const(),
                         reduce_memory.data());
-        // std::cout << '\n';
-        // print_mtx(x_info, ar_data.cpu_x_const());
         ar_data.reset_x();
         return error / res_ref_norm;
     };
@@ -175,22 +173,6 @@ int main(int argc, char **argv) {
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<value_type(matrix_info)>>;
     std::array<benchmark_info_t, benchmark_num> benchmark_info = {
-        /*
-        benchmark_info_t{"TRSV multi-kernel fp64",
-                         [&](matrix_info m_info, matrix_info x_info) {
-                             trsv(m_info, t_matrix_type, d_matrix_type,
-                                  ar_data.gpu_mtx_const(), x_info,
-                                  ar_data.gpu_x());
-                         },
-                         ar_compute_error},
-        benchmark_info_t{"TRSV single kernel fp64",
-                         [&](matrix_info m_info, matrix_info x_info) {
-                             trsv_2(m_info, t_matrix_type, d_matrix_type,
-                                    ar_data.gpu_mtx_const(), x_info,
-                                    ar_data.gpu_x(), trsv_helper.data());
-                         },
-                         ar_compute_error},
-        */
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_3(m_info, t_matrix_type, d_matrix_type,
@@ -245,24 +227,6 @@ int main(int argc, char **argv) {
                                          st_data.gpu_x());
                          },
                          st_compute_error},
-        /*
-        benchmark_info_t{"Hand TRSV fp64",
-                         [&](matrix_info m_info, matrix_info x_info) {
-                             control_trsv(m_info, t_matrix_type, d_matrix_type,
-                                          ar_data.cpu_mtx_const(), x_info,
-                                          ar_data.cpu_x());
-                         },
-                         [&](matrix_info x_info) {
-                             value_type error{};
-                             if (measure_error) {
-                                 error = compare(x_info, cpu_x_ref.const_data(),
-                                                 ar_data.cpu_x_const(),
-                                                 reduce_memory.data());
-                             }
-                             ar_data.reset_x();
-                             return error / res_ref_norm;
-                         }},
-        */
     };
 
     std::cout << "Num rows";
@@ -279,8 +243,6 @@ int main(int argc, char **argv) {
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
 
-    // std::vector<std::array<value_type, benchmark_num>>
-
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
         std::array<value_type, benchmark_num> local_res{};
         const matrix_info m_info{{num_rows, num_rows}, max_cols};
@@ -293,7 +255,7 @@ int main(int argc, char **argv) {
             res_ref_norm = reduce<value_type>(
                 x_info, cpu_x_ref.data(),
                 [](ar_type a, ar_type b) { return std::abs(a) + std::abs(b); });
-            // copy again since reduce overwrites
+            // copy again since the reduce operation overwrites
             cpu_x_ref = ar_data.cpu_x_memory();
             //*/
             ar_data.reset_x();
