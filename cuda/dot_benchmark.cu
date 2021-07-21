@@ -7,12 +7,15 @@
 #include <random>
 #include <type_traits>
 
+
 #include "dot_kernels.cuh"
 #include "dot_memory.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
 
-int main(int argc, char **argv) {
+
+int main(int argc, char **argv)
+{
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
@@ -125,7 +128,6 @@ int main(int argc, char **argv) {
 
     auto get_error = [](value_type res, value_type ref_res) -> value_type {
         return std::abs(res - ref_res) / std::abs(ref_res);
-        // return std::abs(res);
     };
     constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
     constexpr std::size_t row_incr = 2'000'000;
@@ -167,7 +169,8 @@ int main(int argc, char **argv) {
             const value_type result_ref = raw_result[benchmark_reference];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 const std::size_t idx = i * benchmark_num + bi;
-                benchmark_error.at(idx) += get_error(raw_result[bi], result_ref);
+                benchmark_error.at(idx) +=
+                    get_error(raw_result[bi], result_ref);
             }
         }
     }

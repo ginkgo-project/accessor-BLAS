@@ -1,42 +1,49 @@
 #pragma once
 
-#include <cusolverDn.h>
-
 #include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 
+
+#include <cusolverDn.h>
+
+
 #include "matrix_helper.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
 
+
 namespace detail {
 
-std::string get_cusolver_error_string(cusolverStatus_t err) {
+
+std::string get_cusolver_error_string(cusolverStatus_t err)
+{
     switch (err) {
-        case CUSOLVER_STATUS_SUCCESS:
-            return "Success";
-        case CUSOLVER_STATUS_NOT_INITIALIZED:
-            return "Not initialized";
-        case CUSOLVER_STATUS_ALLOC_FAILED:
-            return "Allocation failed";
-        case CUSOLVER_STATUS_INVALID_VALUE:
-            return "Invalid value";
-        case CUSOLVER_STATUS_ARCH_MISMATCH:
-            return "Architecture mismatch";
-        case CUSOLVER_STATUS_EXECUTION_FAILED:
-            return "Execution failed";
-        case CUSOLVER_STATUS_INTERNAL_ERROR:
-            return "Internal error";
-        case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
-            return "Matrix type not supported";
-        default:
-            return std::string("Unknown Error: ") + std::to_string(err);
+    case CUSOLVER_STATUS_SUCCESS:
+        return "Success";
+    case CUSOLVER_STATUS_NOT_INITIALIZED:
+        return "Not initialized";
+    case CUSOLVER_STATUS_ALLOC_FAILED:
+        return "Allocation failed";
+    case CUSOLVER_STATUS_INVALID_VALUE:
+        return "Invalid value";
+    case CUSOLVER_STATUS_ARCH_MISMATCH:
+        return "Architecture mismatch";
+    case CUSOLVER_STATUS_EXECUTION_FAILED:
+        return "Execution failed";
+    case CUSOLVER_STATUS_INTERNAL_ERROR:
+        return "Internal error";
+    case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+        return "Matrix type not supported";
+    default:
+        return std::string("Unknown Error: ") + std::to_string(err);
     };
 }
 
+
 }  // namespace detail
+
 
 #define CUSOLVER_CALL(call)                                                   \
     do {                                                                      \
@@ -52,7 +59,8 @@ std::string get_cusolver_error_string(cusolverStatus_t err) {
 using CusolverContext = std::remove_pointer_t<cusolverDnHandle_t>;
 
 std::unique_ptr<CusolverContext, std::function<void(cusolverDnHandle_t)>>
-cusolver_get_handle() {
+cusolver_get_handle()
+{
     cusolverDnHandle_t handle;
     CUSOLVER_CALL(cusolverDnCreate(&handle));
     return {handle, [](cusolverDnHandle_t handle) {
@@ -62,11 +70,11 @@ cusolver_get_handle() {
 
 template <typename ValueType>
 class TrsvMemory {
-   private:
+private:
     static constexpr auto CPU_device = Memory<ValueType>::Device::cpu;
     static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
 
-   public:
+public:
     template <typename MtxGen, typename VectGen>
     TrsvMemory(std::size_t max_rows, std::size_t max_cols, MtxGen &&cpu_mtx_gen,
                VectGen &&cpu_vect_gen)
@@ -77,7 +85,8 @@ class TrsvMemory {
           cpu_x_init_(cpu_x_),
           gpu_mtx_(GPU_device, m_info_.get_1d_size()),
           gpu_x_(GPU_device, x_info_.get_1d_size()),
-          gpu_x_init_(GPU_device, x_info_.get_1d_size()) {
+          gpu_x_init_(GPU_device, x_info_.get_1d_size())
+    {
         gpu_mtx_.copy_from(cpu_mtx_);
         gpu_x_.copy_from(cpu_x_);
         gpu_x_init_.copy_from(cpu_x_init_);
@@ -136,7 +145,8 @@ class TrsvMemory {
           cpu_x_init_(CPU_device, x_info_.get_1d_size()),
           gpu_mtx_(GPU_device, m_info_.get_1d_size()),
           gpu_x_(GPU_device, x_info_.get_1d_size()),
-          gpu_x_init_(GPU_device, x_info_.get_1d_size()) {
+          gpu_x_init_(GPU_device, x_info_.get_1d_size())
+    {
         // Note: conversion must be adopted if `error_type` is used
         convert(other);
 
@@ -147,22 +157,25 @@ class TrsvMemory {
 
     void sync_x() { cpu_x_.copy_from(gpu_x_); }
 
-    void reset_x() {
+    void reset_x()
+    {
         cpu_x_.copy_from(cpu_x_init_);
         gpu_x_.copy_from(gpu_x_init_);
     }
 
-   private:
+private:
     template <typename OtherType>
     std::enable_if_t<std::is_floating_point<OtherType>::value> convert(
-        const TrsvMemory<OtherType> &other) {
+        const TrsvMemory<OtherType> &other)
+    {
         convert_with(other,
                      [](OtherType val) { return static_cast<ValueType>(val); });
     }
 
     template <typename OtherType>
     std::enable_if_t<!std::is_floating_point<OtherType>::value> convert(
-        const TrsvMemory<OtherType> &other) {
+        const TrsvMemory<OtherType> &other)
+    {
         convert_with(other, [](OtherType val) {
             return ValueType{
                 static_cast<typename ValueType::value_type>(val.v),
@@ -172,38 +185,41 @@ class TrsvMemory {
 
     template <typename OtherType, typename Callable>
     void convert_with(const TrsvMemory<OtherType> &other,
-                      Callable &&convert_function) {
+                      Callable &&convert_function)
+    {
         convert_mtx(m_info_, other.cpu_mtx_const(), cpu_mtx(),
                     convert_function);
         convert_mtx(x_info_, other.cpu_x_const(), cpu_x(), convert_function);
         cpu_x_init_.copy_from(cpu_x_);
     }
 
-   protected:
+protected:
     ValueType *cpu_mtx() { return cpu_mtx_.data(); }
 
-   public:
+public:
     ValueType *cpu_x() { return cpu_x_.data(); }
     Memory<ValueType> &cpu_x_memory() { return cpu_x_; }
 
     const ValueType *cpu_mtx_const() const { return cpu_mtx_.const_data(); }
     const ValueType *cpu_x_const() const { return cpu_x_.const_data(); }
-    const ValueType *cpu_x_init_const() const {
+    const ValueType *cpu_x_init_const() const
+    {
         return cpu_x_init_.const_data();
     }
     const ValueType *cpu_mtx() const { return cpu_mtx_const(); }
     const ValueType *cpu_x() const { return cpu_x_const(); }
 
-   protected:
+protected:
     ValueType *gpu_mtx() { return gpu_mtx_.data(); }
 
-   public:
+public:
     ValueType *gpu_x() { return gpu_x_.data(); }
     Memory<ValueType> &gpu_x_memory() { return gpu_x_; }
 
     const ValueType *gpu_mtx_const() const { return gpu_mtx_.const_data(); }
     const ValueType *gpu_x_const() const { return gpu_x_.const_data(); }
-    const ValueType *gpu_x_init_const() const {
+    const ValueType *gpu_x_init_const() const
+    {
         return gpu_x_init_.const_data();
     }
     const ValueType *gpu_mtx() const { return gpu_mtx_const(); }
@@ -212,7 +228,7 @@ class TrsvMemory {
     const matrix_info m_info_;
     const matrix_info x_info_;
 
-   private:
+private:
     Memory<ValueType> cpu_mtx_;
     Memory<ValueType> cpu_x_;
     Memory<ValueType> cpu_x_init_;
@@ -221,4 +237,3 @@ class TrsvMemory {
     Memory<ValueType> gpu_x_;
     Memory<ValueType> gpu_x_init_;
 };
-

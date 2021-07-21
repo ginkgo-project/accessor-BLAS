@@ -1,29 +1,34 @@
 #pragma once
 
-#include <cublas_v2.h>
-
 #include <array>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+
+#include <cublas_v2.h>
+
+
 struct matrix_info {
     const std::array<std::size_t, 2> size;
     const std::size_t stride;
 
     constexpr matrix_info(const std::array<std::size_t, 2> size)
-        : size(size), stride{size[1]} {}
+        : size(size), stride{size[1]}
+    {}
     constexpr matrix_info(const std::array<std::size_t, 2> size,
                           const std::size_t stride)
-        : size(size), stride{stride} {}
+        : size(size), stride{stride}
+    {}
 
     std::size_t get_1d_size() const { return size[0] * stride; }
     std::size_t get_num_elems() const { return size[0] * size[1]; }
 };
 
 template <typename ValueType>
-constexpr ValueType ceildiv(ValueType a, ValueType b) {
+constexpr ValueType ceildiv(ValueType a, ValueType b)
+{
     return (a <= 0) ? a / b : (a - 1) / b + 1;
 }
 
@@ -55,44 +60,48 @@ constexpr ValueType ceildiv(ValueType a, ValueType b) {
 void synchronize() { CUDA_CALL(cudaDeviceSynchronize()); }
 
 struct cuda_event {
-   public:
+public:
     cuda_event() { CUDA_CALL(cudaEventCreate(&ev_)); }
 
     ~cuda_event() { cudaEventDestroy(ev_); }
 
-    void reset() {
+    void reset()
+    {
         CUDA_CALL(cudaEventDestroy(ev_));
         CUDA_CALL(cudaEventCreate(&ev_));
     }
 
     cudaEvent_t &get() { return ev_; }
 
-   private:
+private:
     cudaEvent_t ev_;
 };
 
 class CudaTimer {
-   public:
+public:
     void start() { CUDA_CALL(cudaEventRecord(start_.get(), 0)); }
 
-    void stop() {
+    void stop()
+    {
         CUDA_CALL(cudaEventRecord(end_.get(), 0));
         CUDA_CALL(cudaEventSynchronize(end_.get()));
     }
 
-    void reset() {
+    void reset()
+    {
         start_.reset();
         end_.reset();
     }
 
     // Returns the time in ms
-    double get_time() {
+    double get_time()
+    {
         float time{};
         CUDA_CALL(cudaEventElapsedTime(&time, start_.get(), end_.get()));
         return time;
     }
 
-   private:
+private:
     cuda_event start_;
     cuda_event end_;
 };
@@ -100,7 +109,8 @@ class CudaTimer {
 using CublasContext = std::remove_pointer_t<cublasHandle_t>;
 
 std::unique_ptr<CublasContext, std::function<void(cublasHandle_t)>>
-cublas_get_handle() {
+cublas_get_handle()
+{
     cublasHandle_t handle;
     CUBLAS_CALL(cublasCreate(&handle));
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
@@ -108,16 +118,19 @@ cublas_get_handle() {
             [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
 }
 
-void cublas_set_host_ptr_mode(cublasHandle_t handle) {
+void cublas_set_host_ptr_mode(cublasHandle_t handle)
+{
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
 }
 
-void cublas_set_device_ptr_mode(cublasHandle_t handle) {
+void cublas_set_device_ptr_mode(cublasHandle_t handle)
+{
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE));
 }
 
 template <typename Callable>
-double benchmark_function(Callable func, bool skip = false) {
+double benchmark_function(Callable func, bool skip = false)
+{
     constexpr int bench_iters{10};
     double time_ms[bench_iters];
     CudaTimer ctimer;
@@ -142,4 +155,3 @@ double benchmark_function(Callable func, bool skip = false) {
     }
     return bench_iters == 0 ? double{} : result_ms;
 }
-

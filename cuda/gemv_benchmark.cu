@@ -8,13 +8,16 @@
 #include <string>
 #include <type_traits>
 
+
 #include "gemv_kernels.cuh"
 #include "gemv_memory.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
 
+
 template <typename OutputType, typename InputType, typename ReduceOp>
-OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
+OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
+{
     std::size_t end = info.size[0];
     for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
          halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
@@ -35,19 +38,22 @@ OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
 }
 
 template <typename T>
-std::enable_if_t<std::is_floating_point<T>::value, T> get_value(T val) {
+std::enable_if_t<std::is_floating_point<T>::value, T> get_value(T val)
+{
     return val;
 }
 
 template <typename T>
 std::enable_if_t<!std::is_floating_point<T>::value, typename T::value_type>
-get_value(T val) {
+get_value(T val)
+{
     return val.e;
 }
 
 template <typename ReferenceType, typename OtherType, typename ValueType>
 ValueType compare(const matrix_info info, const ReferenceType *mtx1,
-                  const OtherType *mtx2, ValueType *tmp) {
+                  const OtherType *mtx2, ValueType *tmp)
+{
     using return_type = decltype(get_value(ReferenceType{}));
     static_assert(std::is_same<return_type, ValueType>::value,
                   "Types must match!");
@@ -70,7 +76,8 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
         info, tmp, [](ValueType o1, ValueType o2) { return o1 + o2; });
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
