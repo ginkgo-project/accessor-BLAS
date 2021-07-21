@@ -190,13 +190,11 @@ void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
                     static_cast<std::int64_t>(block_size_apply /
                                               kernel::WARP_SIZE)),
             1, 1);
-        //*
         if (block_start + kernel::WARP_SIZE < m_info.size[0]) {
             kernel::lower_trsv_apply<block_size_apply, kernel::WARP_SIZE>
                 <<<grid_apply, block_apply>>>(block_start, m_info, mtx, x_info,
                                               x);
         }
-        //*/
     }
 }
 
@@ -231,11 +229,8 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     //         blockDim.z = 1
     constexpr int triang_stride = swarp_size + 1;
 
-    //__shared__ ValueType shared[swarp_size * triang_stride];
     __shared__ ValueType triang[swarp_size * triang_stride];
     __shared__ std::uint32_t shared_row_block_idx[1];
-    //= reinterpret_cast<std::uint32_t *>(
-    //    triang_stride + swarp_size * triang_stride);
     // correction value for x[block_col * swarp_size + threadIdx.x]
     __shared__ ValueType x_correction[swarp_size];
 
@@ -246,7 +241,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_2(
     }
     group.sync();
     const std::int64_t row_block_idx = *shared_row_block_idx;
-    // printf("(x, y): (%d, %d) ");
 
     if (row_block_idx * swarp_size >= m_info.size[0]) {
         return;
@@ -381,7 +375,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
                   "swarp_size must be a multiple of swarps_per_block");
     // assert: blockDim.x == swarp_size; blockDim.y = swarps_per_block;
     //         blockDim.z = 1
-    using index_type = std::int64_t;  // std::int32_t;
+    using index_type = std::int64_t;
     constexpr int triang_stride = swarp_size + 1;
 
     // stores the trianglular system in column major

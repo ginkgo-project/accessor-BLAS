@@ -26,7 +26,6 @@ __global__ __launch_bounds__(block_size) void gemv(
     }
     const std::int64_t row_start = row_idx * minfo.stride;
     // can't use array with `error_type`
-    //__shared__ ValueType shared[block_size];
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
 
@@ -59,8 +58,6 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
                                                        ResRange res) {
     using ar_type = decltype(mtx(0, 0) + mtx(0, 0));
     static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
-    // static_assert(std::is_same<ar_type, double>::value, "Type must be
-    // double!!!");
     // expect x_info.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
     if (row_idx >= mtx.length(0)) {
@@ -114,7 +111,6 @@ void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
           const matrix_info res_info, ValueType beta, ValueType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
-    // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
     const dim3 grid(minfo.size[0], 1, 1);
 
     kernel::gemv<block_size, ValueType>
@@ -127,7 +123,6 @@ void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
               const matrix_info res_info, ArType beta, StType *res) {
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
-    // const dim3 grid(ceildiv<std::int32_t>(minfo.size[0], block_size), 1, 1);
     const dim3 grid(minfo.size[0], 1, 1);
 
     // Accessor Setup
@@ -148,18 +143,6 @@ void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
         <<<grid, block>>>(alpha, m_acc, x_acc, beta, res_acc);
 }
 
-#define BIND_CUBLAS_GEMM(ValueType, CublasName)                                \
-    void cublas_gemm(cublasHandle_t handle, cublasOperation_t transa,          \
-                     cublasOperation_t transb, int m, int n, int k,            \
-                     const ValueType *alpha, const ValueType *a, int lda,      \
-                     const ValueType *b, int ldb, const ValueType *beta,       \
-                     ValueType *c, int ldc) {                                  \
-        CUBLAS_CALL(CublasName(handle, transa, transb, m, n, k, alpha, a, lda, \
-                               b, ldb, beta, c, ldc));                         \
-    }
-BIND_CUBLAS_GEMM(double, cublasDgemm)
-BIND_CUBLAS_GEMM(float, cublasSgemm)
-#undef BIND_CUBLAS_GEMM
 
 #define BIND_CUBLAS_GEMV(ValueType, CublasName)                              \
     void cublas_gemv(cublasHandle_t handle, cublasOperation_t transa, int m, \
@@ -180,20 +163,10 @@ void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
                  const matrix_info res_info, ValueType beta, ValueType *y) {
     // Note: CUBLAS expects the matrices to be stored in column major,
     //       so the sizes will be transposed for the cublas call
-    // auto alpha = ValueType{1};
-    // auto beta = ValueType{0};
-    //*
     cublas_gemv(handle, CUBLAS_OP_T, static_cast<int>(minfo.size[0]),
                 static_cast<int>(minfo.size[1]), &alpha, mtx,
                 static_cast<int>(minfo.stride), x,
                 static_cast<int>(x_info.stride), &beta, y,
                 static_cast<int>(res_info.stride));
-    /*/
-    cublas_gemm(
-        handle, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(x_info.size[1]),
-        static_cast<int>(x_info.size[0]), static_cast<int>(minfo.size[1]),
-        &alpha, x, x_info.stride, mtx, static_cast<int>(minfo.stride), &beta,
-        y, static_cast<int>(res_info.stride));
-    //*/
 }
 

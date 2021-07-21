@@ -89,9 +89,6 @@ class TrsvMemory {
         }
         // Factorize matrix into L and U on the CUDA device:
         auto handle = cusolver_get_handle();
-        // Reduce the workspace size to a minimum (reduces runtime as well) with
-        // cusolverDnSetAdvOptions(params, CUSOLVERDN_GETRF, CUSOLVER_ALG_1)
-        // cublasOperation_t trans = CUBLAS_OP_T;
 
         Memory<int> cpu_info(Memory<int>::Device::cpu, 1);
         *cpu_info.data() = 0;
@@ -115,7 +112,6 @@ class TrsvMemory {
             static_cast<int>(m_info_.stride), &workspace_size));
 
         Memory<ValueType> gpu_workspace(GPU_device, workspace_size);
-        // std::cout << "Workspace size: " << workspace_size << '\n';
 
         // Expects the matrix in column-major
         // Run matrix factorization
@@ -124,34 +120,11 @@ class TrsvMemory {
             static_cast<int>(m_info_.size[1]), gpu_mtx_.data(),
             static_cast<int>(m_info_.stride), gpu_workspace.data(),
             gpu_pivot.data(), gpu_info.data()));
-        // Copy back to CPU (maybe transpose?)
 
-        // cpu_pivot = gpu_pivot;
         cpu_info = gpu_info;
-        //std::cout << "devInfo: " << *cpu_info.data() << '\n';
         synchronize();
-        // std::cout << "cpu_pivot:\n";
-        // print_mtx(matrix_info{{1ull, pivot_size}}, cpu_pivot.data());
 
-        // Memory<ValueType> cpu_pre_perm(CPU_device, m_info_.get_1d_size());
-        // cpu_pre_perm = gpu_mtx_;
-
-        // Permute matrix according to pivot_info
         cpu_mtx_ = gpu_mtx_;
-        /*
-        // Permuting should be done on the original data in the CPU, followed
-        // by generating the LU decomposition again!
-        for (int i = 0; i < m_info_.size[0]; ++i) {
-            for (int j = 0; j < m_info_.size[1]; ++j) {
-                const auto orig_idx = i * m_info_.stride + j;
-                const auto swap_idx =
-                    i * m_info_.stride + cpu_pivot.data()[j] - 1;
-
-                std::swap(cpu_mtx_.data()[orig_idx], cpu_mtx_.data()[swap_idx]);
-            }
-        }
-        gpu_mtx_ = cpu_mtx_;
-        //*/
     }
 
     template <typename OtherType>
@@ -223,7 +196,6 @@ class TrsvMemory {
 
    protected:
     ValueType *gpu_mtx() { return gpu_mtx_.data(); }
-    // ValueType *gpu_x() { return gpu_x_.const_data(); }
 
    public:
     ValueType *gpu_x() { return gpu_x_.data(); }

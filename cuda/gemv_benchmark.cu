@@ -71,15 +71,9 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
 }
 
 int main(int argc, char **argv) {
-    /*
-    using ar_type = error_number<double>;
-    using st_type = error_number<float>;
-    using value_type = ar_type::value_type;
-    /*/
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
-    //*/
 
     constexpr ar_type ar_alpha{1.0};
     constexpr ar_type ar_beta{1.0};
@@ -105,14 +99,11 @@ int main(int argc, char **argv) {
     const bool normalize_error{true};
 
     constexpr std::size_t max_rows{24500};
-    // constexpr std::size_t max_rows{6500};
-    // constexpr std::size_t max_rows{8 * 1024};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
-    // std::uniform_real_distribution<value_type> mtx_dist(-10.0, 10.0);
     auto vector_dist = mtx_dist;
 
     auto ar_data =
@@ -161,7 +152,7 @@ int main(int argc, char **argv) {
     std::cout << std::scientific;
 
     constexpr std::size_t benchmark_num{7};
-    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
+    constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string,
                    std::function<void(matrix_info, matrix_info, matrix_info)>,
@@ -240,8 +231,8 @@ int main(int argc, char **argv) {
     std::cout.precision(16);
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
-    constexpr auto start = 100;  // max_rows / 48;
-    constexpr auto row_incr = start;  // start;
+    constexpr auto start = 100;
+    constexpr auto row_incr = start;
     for (std::size_t num_rows = start; num_rows <= max_rows;
          num_rows += row_incr) {
         std::array<value_type, benchmark_num> local_res{};
