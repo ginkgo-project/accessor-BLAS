@@ -8,28 +8,6 @@
 #include <stdexcept>
 #include <string>
 
-#define CUDA_CALL(call)                                                  \
-    do {                                                                 \
-        auto err = call;                                                 \
-        if (err != cudaSuccess) {                                        \
-            std::cerr << "Cuda error in file " << __FILE__               \
-                      << " L:" << __LINE__                               \
-                      << "; Error: " << cudaGetErrorString(err) << '\n'; \
-            throw std::runtime_error(cudaGetErrorString(err));           \
-        }                                                                \
-    } while (false)
-
-#define CUBLAS_CALL(call)                                                 \
-    do {                                                                  \
-        auto err = call;                                                  \
-        if (err != CUBLAS_STATUS_SUCCESS) {                               \
-            std::cerr << "CuBLAS error in file " << __FILE__              \
-                      << " L:" << __LINE__ << "; Error: " << err << '\n'; \
-            throw std::runtime_error(std::string("Error: ") +             \
-                                     std::to_string(err));                \
-        }                                                                 \
-    } while (false)
-
 struct matrix_info {
     const std::array<std::size_t, 2> size;
     const std::size_t stride;
@@ -51,6 +29,28 @@ constexpr ValueType ceildiv(ValueType a, ValueType b) {
 
 ///////////// GPU relevant code \\\\\\\\\\\\\
 
+
+#define CUDA_CALL(call)                                                  \
+    do {                                                                 \
+        auto err = call;                                                 \
+        if (err != cudaSuccess) {                                        \
+            std::cerr << "Cuda error in file " << __FILE__               \
+                      << " L:" << __LINE__                               \
+                      << "; Error: " << cudaGetErrorString(err) << '\n'; \
+            throw std::runtime_error(cudaGetErrorString(err));           \
+        }                                                                \
+    } while (false)
+
+#define CUBLAS_CALL(call)                                                 \
+    do {                                                                  \
+        auto err = call;                                                  \
+        if (err != CUBLAS_STATUS_SUCCESS) {                               \
+            std::cerr << "CuBLAS error in file " << __FILE__              \
+                      << " L:" << __LINE__ << "; Error: " << err << '\n'; \
+            throw std::runtime_error(std::string("Error: ") +             \
+                                     std::to_string(err));                \
+        }                                                                 \
+    } while (false)
 
 void synchronize() { CUDA_CALL(cudaDeviceSynchronize()); }
 
@@ -104,7 +104,6 @@ cublas_get_handle() {
     cublasHandle_t handle;
     CUBLAS_CALL(cublasCreate(&handle));
     CUBLAS_CALL(cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_HOST));
-    // CUBLAS_POINTER_MODE_DEVICE
     return {handle,
             [](cublasHandle_t handle) { CUBLAS_CALL(cublasDestroy(handle)); }};
 }
@@ -141,7 +140,6 @@ double benchmark_function(Callable func, bool skip = false) {
     for (int i = 0; i < bench_iters; ++i) {
         result_ms = std::min(result_ms, time_ms[i]);
     }
-    // result_ms /= static_cast<double>(bench_iters);
     return bench_iters == 0 ? double{} : result_ms;
 }
 

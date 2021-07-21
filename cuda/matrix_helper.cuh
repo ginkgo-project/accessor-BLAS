@@ -80,9 +80,7 @@ void convert_mtx(const matrix_info &info, const InputType *input,
 
 template <typename ValueType>
 void print_mtx(const matrix_info &info, const ValueType *vec) {
-    // std::ios old_state{nullptr};
-    // old_state.copyfmt(std::cout);
-    auto cout_flags = std::cout.flags(); // used to undo std::fixed
+    auto cout_flags = std::cout.flags();
     auto old_prec = std::cout.precision();
     std::cout.precision(3);
     // showpos: show + sign for positive numbers
@@ -98,6 +96,5 @@ void print_mtx(const matrix_info &info, const ValueType *vec) {
     std::cout.flags(cout_flags); 
     std::cout.precision(old_prec);
     // apparently can throw exceptions since `old_state` is not properly initialized
-    //std::cout.copyfmt(old_state); 
 }
 

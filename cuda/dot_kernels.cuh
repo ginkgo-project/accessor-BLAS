@@ -7,6 +7,7 @@
 #include <accessor/reduced_row_major.hpp>
 #include <cinttypes>
 
+#include "atomics.cuh"
 #include "kernel_utils.cuh"
 #include "utils.cuh"
 
@@ -38,7 +39,6 @@ __global__ __launch_bounds__(block_size) void dot(
     const auto local_id = group.thread_rank();
 
     // can't use array with `error_type`
-    //__shared__ ValueType shared[block_size];
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
 
@@ -50,7 +50,7 @@ __global__ __launch_bounds__(block_size) void dot(
     shared[local_id] = local_result;
     reduce(group, shared, [](ValueType a, ValueType b) { return a + b; });
     if (local_id == 0) {
-        atomicAdd(res, shared[local_id]);
+        atomic_add(res, shared[local_id]);
     }
 }
 
@@ -74,7 +74,6 @@ __global__ __launch_bounds__(block_size) void acc_dot(
     const auto local_id = group.thread_rank();
 
     // can't use array with `error_type`
-    //__shared__ ar_type shared[block_size];
     __shared__ char shared_impl[sizeof(ar_type) * block_size];
     auto shared = reinterpret_cast<ar_type *>(shared_impl);
 
@@ -84,7 +83,7 @@ __global__ __launch_bounds__(block_size) void acc_dot(
     shared[local_id] = local_result;
     reduce(group, shared, [](ar_type a, ar_type b) { return a + b; });
     if (local_id == 0) {
-        atomicAdd(res, shared[local_id]);
+        atomic_add(res, shared[local_id]);
     }
 }
 
@@ -110,17 +109,9 @@ void dot(const cudaDeviceProp &prop, const matrix_info x_info,
          ValueType *res) {
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
-    // TODO find a proper grid size
     const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
 
-    /*
-    // Copying is a lot slower than an init_kernel
-    ValueType initial_res{0};
-    CUDA_CALL(cudaMemcpy(res, &initial_res, sizeof(ValueType),
-                         cudaMemcpyHostToDevice));
-    /*/
     kernel::init_res<<<1, 1>>>(res);
-    //*/
     kernel::dot<block_size, ValueType>
         <<<grid, block>>>(static_cast<std::int32_t>(x_info.size[0]), x,
                           static_cast<std::int32_t>(x_info.stride), y,
@@ -133,7 +124,6 @@ void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
              ArType *res) {
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
-    // TODO find a proper grid size
     const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
 
     // Accessor Setup
@@ -148,14 +138,7 @@ void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
     auto x_acc = c_range(x_info.size, x, x_stride);
     auto y_acc = c_range(y_info.size, y, y_stride);
 
-    /*
-    // Copying is a lot slower than an init_kernel
-    ArType initial_res{0};
-    CUDA_CALL(cudaMemcpy(res, &initial_res, sizeof(ArType),
-                         cudaMemcpyHostToDevice));
-    /*/
     kernel::init_res<<<1, 1>>>(res);
-    //*/
     kernel::acc_dot<block_size><<<grid, block>>>(x_acc, y_acc, res);
 }
 
@@ -172,11 +155,6 @@ template <typename ValueType>
 void cublas_dot(cublasHandle_t handle, const matrix_info x_info,
                 const ValueType *x, const matrix_info y_info,
                 const ValueType *y, ValueType *res) {
-    /*
-    if (x_info.size[0] != y_info.size[0] || x_info.size[1] != 1 ||
-    y_info.size[1] != 1) { throw std::runtime_error("Mismatching vectors!");
-    }
-    //*/
     cublas_dot(handle, static_cast<int>(x_info.size[0]), x,
                static_cast<int>(x_info.stride), y,
                static_cast<int>(y_info.stride), res);

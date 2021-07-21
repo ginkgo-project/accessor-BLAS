@@ -13,18 +13,11 @@
 #include "utils.cuh"
 
 int main(int argc, char **argv) {
-    /*
-    using ar_type = error_number<double>;
-    using st_type = error_number<float>;
-    using value_type = ar_type::value_type;
-    /*/
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
-    //*/
 
     constexpr std::size_t max_size{535 * 1000 * 1000};
-    // constexpr std::size_t max_size{128 * 1024 * 1024};
     constexpr char DELIM{';'};
 
     bool detailed_error{false};
@@ -42,11 +35,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     std::default_random_engine rengine(42);
-    //*
     std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
-    /*/
-    // std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
-    //*/
 
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
     auto st_data = DotMemory<st_type>(ar_data);
@@ -56,7 +45,6 @@ int main(int argc, char **argv) {
 
     cudaDeviceProp device_prop;
     CUDA_CALL(cudaGetDeviceProperties(&device_prop, 0));
-    // std::cout << "Number SMs: " << device_prop.multiProcessorCount << '\n';
 
     auto ar_get_result = [&ar_data]() { return ar_data.get_result(); };
     auto st_get_result = [&st_data]() {
@@ -64,7 +52,7 @@ int main(int argc, char **argv) {
     };
 
     constexpr std::size_t benchmark_num{7};
-    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
+    constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<value_type()>>;
@@ -140,7 +128,7 @@ int main(int argc, char **argv) {
         // return std::abs(res);
     };
     constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
-    constexpr std::size_t row_incr = 2'000'000;  // (max_size - start) / steps;
+    constexpr std::size_t row_incr = 2'000'000;
     constexpr std::size_t steps = (max_size - start) / row_incr;
     constexpr std::size_t randomize_num{10};
 

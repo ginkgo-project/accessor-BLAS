@@ -14,9 +14,6 @@
 #include "trsv_memory.cuh"
 #include "utils.cuh"
 
-// Reason for triangular matrices to be ill-conditioned:
-// http://www.math.lsa.umich.edu/~divakar/1-ViswanathTrefethen1998.pdf
-
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op) {
     std::size_t end = info.size[0];
@@ -75,23 +72,12 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
 }
 
 int main(int argc, char **argv) {
-    /*
-    using ar_type = error_number<double>;
-    using st_type = error_number<float>;
-    using value_type = ar_type::value_type;
-    /*/
     using ar_type = double;
     using st_type = float;
     using value_type = ar_type;
-    //*/
 
-    /*
-    constexpr tmtx_t t_matrix_type = tmtx_t::lower;
-    constexpr dmtx_t d_matrix_type = dmtx_t::non_unit;
-    /*/
     constexpr tmtx_t t_matrix_type = tmtx_t::upper;
     constexpr dmtx_t d_matrix_type = dmtx_t::unit;
-    //*/
 
     bool measure_error{false};
 
@@ -109,23 +95,16 @@ int main(int argc, char **argv) {
     }
 
     constexpr std::size_t max_rows{24 * 1000};
-    // constexpr std::size_t max_rows{8 * 1000};
-    // constexpr std::size_t max_rows{99};
-    // constexpr std::size_t max_rows{10 * 1000};
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     constexpr std::size_t start = std::min(max_rows, std::size_t{50});
-    // constexpr std::size_t start = std::min(max_rows, std::size_t{1000});
-    // constexpr auto start = max_rows / 48;
     constexpr std::size_t row_incr = start;
 
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
-    // std::uniform_real_distribution<value_type> mtx_dist(-10.0, 10.0);
     auto vector_dist = mtx_dist;
     auto cpu_mtx_gen = [&](matrix_info m_info) {
-        // return gen_dd_mtx<ar_type>(m_info, mtx_dist, rengine, 1);
         return gen_mtx<ar_type>(m_info, mtx_dist, rengine);
     };
     auto cpu_vect_gen = [&](matrix_info v_info) {
@@ -168,7 +147,7 @@ int main(int argc, char **argv) {
     // Setting up names and associated benchmark and error functions
 
     constexpr std::size_t benchmark_num{7};
-    constexpr std::size_t benchmark_reference{0};  //{benchmark_num - 2};
+    constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<value_type(matrix_info)>>;
@@ -257,7 +236,6 @@ int main(int argc, char **argv) {
                 [](ar_type a, ar_type b) { return std::abs(a) + std::abs(b); });
             // copy again since the reduce operation overwrites
             cpu_x_ref = ar_data.cpu_x_memory();
-            //*/
             ar_data.reset_x();
         }
         for (std::size_t i = 0; i < benchmark_num; ++i) {

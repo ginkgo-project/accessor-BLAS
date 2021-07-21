@@ -36,7 +36,7 @@ class DotMemory {
           gpu_x_(GPU_device, x_info_.get_1d_size()),
           gpu_y_(GPU_device, y_info_.get_1d_size()),
           gpu_res_(GPU_device, 1) {
-        // Note: conversion must be adopted if `error_type` is used
+        // Note: conversion must be adopted if a custom type is used
         convert(other);
 
         copy_cpu_to_gpu();
