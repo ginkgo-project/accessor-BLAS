@@ -3,14 +3,18 @@
 #include <cooperative_groups.h>
 #include <cublas_v2.h>
 
+
 #include <accessor/range.hpp>
 #include <accessor/reduced_row_major.hpp>
 #include <cinttypes>
 
+
 #include "kernel_utils.cuh"
 #include "utils.cuh"
 
+
 namespace kernel {
+
 
 namespace cg = cooperative_groups;
 
@@ -18,7 +22,8 @@ template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void gemv(
     const matrix_info minfo, ValueType alpha, const ValueType *__restrict__ mtx,
     const matrix_info x_info, const ValueType *__restrict__ x,
-    const matrix_info res_info, ValueType beta, ValueType *__restrict__ res) {
+    const matrix_info res_info, ValueType beta, ValueType *__restrict__ res)
+{
     // expect x_info.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
     if (row_idx >= minfo.size[0]) {
@@ -55,7 +60,8 @@ template <std::int64_t block_size, typename MtxRange, typename XRange,
 __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
                                                        MtxRange mtx, XRange x,
                                                        ArType beta,
-                                                       ResRange res) {
+                                                       ResRange res)
+{
     using ar_type = decltype(mtx(0, 0) + mtx(0, 0));
     static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
     // expect x_info.size[1] == 1
@@ -85,12 +91,15 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
     }
 }
 
+
 }  // namespace kernel
+
 
 template <typename ValueType>
 void control_gemv(const matrix_info m_info, ValueType alpha,
                   const ValueType *mtx, const matrix_info x_info,
-                  ValueType beta, const ValueType *x, ValueType *res) {
+                  ValueType beta, const ValueType *x, ValueType *res)
+{
     if (x_info.size[1] != 1) {
         throw "Error!";
     }
@@ -108,7 +117,8 @@ void control_gemv(const matrix_info m_info, ValueType alpha,
 template <typename ValueType>
 void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
           const matrix_info x_info, const ValueType *x,
-          const matrix_info res_info, ValueType beta, ValueType *res) {
+          const matrix_info res_info, ValueType beta, ValueType *res)
+{
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(minfo.size[0], 1, 1);
@@ -120,7 +130,8 @@ void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
 template <typename ArType, typename StType>
 void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
               const matrix_info x_info, const StType *x,
-              const matrix_info res_info, ArType beta, StType *res) {
+              const matrix_info res_info, ArType beta, StType *res)
+{
     constexpr std::int32_t block_size{512};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(minfo.size[0], 1, 1);
@@ -148,7 +159,8 @@ void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
     void cublas_gemv(cublasHandle_t handle, cublasOperation_t transa, int m, \
                      int n, const ValueType *alpha, const ValueType *A,      \
                      int lda, const ValueType *x, int incx,                  \
-                     const ValueType *beta, ValueType *y, int incy) {        \
+                     const ValueType *beta, ValueType *y, int incy)          \
+    {                                                                        \
         CUBLAS_CALL(CublasName(handle, transa, m, n, alpha, A, lda, x, incx, \
                                beta, y, incy));                              \
     }
@@ -160,7 +172,8 @@ template <typename ValueType>
 void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
                  ValueType alpha, const ValueType *mtx,
                  const matrix_info x_info, const ValueType *x,
-                 const matrix_info res_info, ValueType beta, ValueType *y) {
+                 const matrix_info res_info, ValueType beta, ValueType *y)
+{
     // Note: CUBLAS expects the matrices to be stored in column major,
     //       so the sizes will be transposed for the cublas call
     cublas_gemv(handle, CUBLAS_OP_T, static_cast<int>(minfo.size[0]),
@@ -169,4 +182,3 @@ void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
                 static_cast<int>(x_info.stride), &beta, y,
                 static_cast<int>(res_info.stride));
 }
-

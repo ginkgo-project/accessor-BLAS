@@ -1,25 +1,31 @@
 #pragma once
 
+#include <cinttypes>
+
+
 #include <cooperative_groups.h>
 #include <cublas_v2.h>
-
 #include <accessor/range.hpp>
 #include <accessor/reduced_row_major.hpp>
-#include <cinttypes>
+
 
 #include "atomics.cuh"
 #include "kernel_utils.cuh"
 #include "utils.cuh"
 
+
 constexpr int grids_per_sm{32};
 constexpr int dot_block_size{1024};
 
+
 namespace kernel {
+
 
 namespace cg = cooperative_groups;
 
 template <typename ValueType>
-__global__ __launch_bounds__(1) void init_res(ValueType *__restrict__ res) {
+__global__ __launch_bounds__(1) void init_res(ValueType *__restrict__ res)
+{
     *res = ValueType{0};
 }
 
@@ -27,7 +33,8 @@ template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void dot(
     const std::int32_t n, const ValueType *__restrict__ x,
     const std::int32_t x_stride, const ValueType *__restrict__ y,
-    const std::int32_t y_stride, ValueType *__restrict__ res) {
+    const std::int32_t y_stride, ValueType *__restrict__ res)
+{
     // Here, using int32 is fine since input & stride are also in int32
     using index_type = std::int32_t;
 
@@ -58,8 +65,9 @@ __global__ __launch_bounds__(block_size) void dot(
 // (lowest-dim must always be 0)
 template <std::int64_t block_size, typename XRange, typename YRange,
           typename ArType>
-__global__ __launch_bounds__(block_size) void acc_dot(
-    XRange x, YRange y, ArType *__restrict__ res) {
+__global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
+                                                      ArType *__restrict__ res)
+{
     using ar_type = decltype(x(0, 0) + x(0, 0));
     // Here, using int64 results in better performance since the stride in the
     // accessors is stored in uint64
@@ -87,11 +95,14 @@ __global__ __launch_bounds__(block_size) void acc_dot(
     }
 }
 
+
 }  // namespace kernel
+
 
 template <typename ValueType>
 void control_dot(const matrix_info x_info, const ValueType *x,
-                 const matrix_info y_info, const ValueType *y, ValueType *res) {
+                 const matrix_info y_info, const ValueType *y, ValueType *res)
+{
     if (x_info.size[0] != y_info.size[0] || x_info.size[1] != 1 ||
         y_info.size[1] != 1) {
         throw std::runtime_error("Mismatching vectors!");
@@ -106,7 +117,8 @@ void control_dot(const matrix_info x_info, const ValueType *x,
 template <typename ValueType>
 void dot(const cudaDeviceProp &prop, const matrix_info x_info,
          const ValueType *x, const matrix_info y_info, const ValueType *y,
-         ValueType *res) {
+         ValueType *res)
+{
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
@@ -121,7 +133,8 @@ void dot(const cudaDeviceProp &prop, const matrix_info x_info,
 template <typename ArType, typename StType>
 void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
              const StType *x, const matrix_info y_info, const StType *y,
-             ArType *res) {
+             ArType *res)
+{
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
@@ -142,10 +155,11 @@ void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
     kernel::acc_dot<block_size><<<grid, block>>>(x_acc, y_acc, res);
 }
 
-#define BIND_CUBLAS_DOT(ValueType, CublasName)                                \
-    void cublas_dot(cublasHandle_t handle, int n, const ValueType *x,         \
-                    int incx, const ValueType *y, int incy, ValueType *res) { \
-        CUBLAS_CALL(CublasName(handle, n, x, incx, y, incy, res));            \
+#define BIND_CUBLAS_DOT(ValueType, CublasName)                              \
+    void cublas_dot(cublasHandle_t handle, int n, const ValueType *x,       \
+                    int incx, const ValueType *y, int incy, ValueType *res) \
+    {                                                                       \
+        CUBLAS_CALL(CublasName(handle, n, x, incx, y, incy, res));          \
     }
 BIND_CUBLAS_DOT(double, cublasDdot)
 BIND_CUBLAS_DOT(float, cublasSdot)
@@ -154,9 +168,9 @@ BIND_CUBLAS_DOT(float, cublasSdot)
 template <typename ValueType>
 void cublas_dot(cublasHandle_t handle, const matrix_info x_info,
                 const ValueType *x, const matrix_info y_info,
-                const ValueType *y, ValueType *res) {
+                const ValueType *y, ValueType *res)
+{
     cublas_dot(handle, static_cast<int>(x_info.size[0]), x,
                static_cast<int>(x_info.stride), y,
                static_cast<int>(y_info.stride), res);
 }
-

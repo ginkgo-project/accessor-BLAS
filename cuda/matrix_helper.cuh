@@ -5,13 +5,16 @@
 #include <iostream>
 #include <stdexcept>
 
+
 #include "memory.cuh"
 #include "utils.cuh"
+
 
 // Note: sub-normal values are filtered out
 template <typename ValueType, typename ValueDist, typename Engine>
 Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
-                          Engine &&engine) {
+                          Engine &&engine)
+{
     if (info.stride < info.size[1]) {
         throw std::runtime_error("Wrong use of stride");
     }
@@ -35,7 +38,8 @@ Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
 // Note: sub-normal values are filtered out
 template <typename ValueType, typename ValueDist, typename Engine>
 Memory<ValueType> gen_dd_mtx(const matrix_info &info, ValueDist &&dist,
-                             Engine &&engine, ValueType diag_val) {
+                             Engine &&engine, ValueType diag_val)
+{
     if (info.stride < info.size[1]) {
         throw std::runtime_error("Wrong use of stride");
     }
@@ -58,7 +62,8 @@ Memory<ValueType> gen_dd_mtx(const matrix_info &info, ValueDist &&dist,
 
 template <typename ValueType, typename ValueDist, typename Engine>
 void write_random(const matrix_info &info, ValueDist &&dist, Engine &&engine,
-                  ValueType *io) {
+                  ValueType *io)
+{
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
@@ -69,7 +74,8 @@ void write_random(const matrix_info &info, ValueDist &&dist, Engine &&engine,
 
 template <typename ResultType, typename InputType, typename Callable>
 void convert_mtx(const matrix_info &info, const InputType *input,
-                 ResultType *output, Callable convert) {
+                 ResultType *output, Callable convert)
+{
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         for (std::size_t col = 0; col < info.size[1]; ++col) {
             const std::size_t idx = row * info.stride + col;
@@ -79,7 +85,8 @@ void convert_mtx(const matrix_info &info, const InputType *input,
 }
 
 template <typename ValueType>
-void print_mtx(const matrix_info &info, const ValueType *vec) {
+void print_mtx(const matrix_info &info, const ValueType *vec)
+{
     auto cout_flags = std::cout.flags();
     auto old_prec = std::cout.precision();
     std::cout.precision(3);
@@ -92,9 +99,9 @@ void print_mtx(const matrix_info &info, const ValueType *vec) {
         }
         std::cout << '\n';
     }
-    //Does not copy some, like precision info
-    std::cout.flags(cout_flags); 
+    // Does not copy some, like precision info
+    std::cout.flags(cout_flags);
     std::cout.precision(old_prec);
-    // apparently can throw exceptions since `old_state` is not properly initialized
+    // apparently can throw exceptions since `old_state` is not properly
+    // initialized
 }
-

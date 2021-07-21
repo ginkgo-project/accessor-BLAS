@@ -2,17 +2,19 @@
 
 #include <type_traits>
 
+
 #include "matrix_helper.cuh"
 #include "memory.cuh"
 #include "utils.cuh"
 
+
 template <typename ValueType>
 class DotMemory {
-   private:
+private:
     static constexpr auto CPU_device = Memory<ValueType>::Device::cpu;
     static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
 
-   public:
+public:
     template <typename VectDist, typename RndEngine>
     DotMemory(std::size_t max_rows, VectDist &&vect_dist, RndEngine &&engine)
         : x_info_{{max_rows, 1}},
@@ -22,10 +24,12 @@ class DotMemory {
           cpu_res_(CPU_device, 1),
           gpu_x_(GPU_device, x_info_.get_1d_size()),
           gpu_y_(GPU_device, y_info_.get_1d_size()),
-          gpu_res_(GPU_device, 1) {
+          gpu_res_(GPU_device, 1)
+    {
         *cpu_res_.data() = ValueType{-999};
         copy_cpu_to_gpu();
     }
+
     template <typename OtherType>
     DotMemory(const DotMemory<OtherType> &other)
         : x_info_(other.x_info_),
@@ -35,40 +39,47 @@ class DotMemory {
           cpu_res_(CPU_device, 1),
           gpu_x_(GPU_device, x_info_.get_1d_size()),
           gpu_y_(GPU_device, y_info_.get_1d_size()),
-          gpu_res_(GPU_device, 1) {
+          gpu_res_(GPU_device, 1)
+    {
         // Note: conversion must be adopted if a custom type is used
         convert(other);
 
         copy_cpu_to_gpu();
     }
 
-    ValueType get_result() {
+    ValueType get_result()
+    {
         cpu_res_.copy_from(gpu_res_);
         return *cpu_res_.data();
     }
-    void copy_cpu_to_gpu() {
+
+    void copy_cpu_to_gpu()
+    {
         gpu_x_.copy_from(cpu_x_);
         gpu_y_.copy_from(cpu_y_);
         gpu_res_.copy_from(cpu_res_);
     }
 
     template <typename OtherType>
-    void convert_from(const DotMemory<OtherType> &other) {
+    void convert_from(const DotMemory<OtherType> &other)
+    {
         convert(other);
         copy_cpu_to_gpu();
     }
 
-   private:
+private:
     template <typename OtherType>
     std::enable_if_t<std::is_floating_point<OtherType>::value> convert(
-        const DotMemory<OtherType> &other) {
+        const DotMemory<OtherType> &other)
+    {
         convert_with(other,
                      [](OtherType val) { return static_cast<ValueType>(val); });
     }
 
     template <typename OtherType>
     std::enable_if_t<!std::is_floating_point<OtherType>::value> convert(
-        const DotMemory<OtherType> &other) {
+        const DotMemory<OtherType> &other)
+    {
         convert_with(other, [](OtherType val) {
             return ValueType{
                 static_cast<typename ValueType::value_type>(val.v),
@@ -78,21 +89,22 @@ class DotMemory {
 
     template <typename OtherType, typename Callable>
     void convert_with(const DotMemory<OtherType> &other,
-                      Callable &&convert_function) {
+                      Callable &&convert_function)
+    {
         convert_mtx(x_info_, other.cpu_x(), cpu_x_nc(), convert_function);
         convert_mtx(y_info_, other.cpu_y(), cpu_y_nc(), convert_function);
         convert_mtx(matrix_info{{1, 1}}, other.cpu_res(), cpu_res_nc(),
                     convert_function);
     }
 
-   public:
+public:
     // Non-const data access needed for conversions and re-randomizing the
     // vectors
     ValueType *cpu_x_nc() { return cpu_x_.data(); }
     ValueType *cpu_y_nc() { return cpu_y_.data(); }
     ValueType *cpu_res_nc() { return cpu_res_.data(); }
 
-   public:
+public:
     const ValueType *cpu_x() const { return cpu_x_.data(); }
     const ValueType *cpu_y() const { return cpu_y_.data(); }
     ValueType *cpu_res() { return cpu_res_.data(); }
@@ -106,7 +118,7 @@ class DotMemory {
     const matrix_info x_info_;
     const matrix_info y_info_;
 
-   private:
+private:
     Memory<ValueType> cpu_x_;
     Memory<ValueType> cpu_y_;
     Memory<ValueType> cpu_res_;
@@ -115,4 +127,3 @@ class DotMemory {
     Memory<ValueType> gpu_y_;
     Memory<ValueType> gpu_res_;
 };
-
