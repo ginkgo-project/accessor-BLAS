@@ -45,7 +45,6 @@ public:
           gpu_x_(GPU_device, x_info_.get_1d_size()),
           gpu_res_(GPU_device, res_info_.get_1d_size())
     {
-        // Note: conversion must be adopted if `error_type` is used
         convert(other);
 
         gpu_mtx_.copy_from(cpu_mtx_);
@@ -57,22 +56,10 @@ public:
 
 private:
     template <typename OtherType>
-    std::enable_if_t<std::is_floating_point<OtherType>::value> convert(
-        const GemvMemory<OtherType> &other)
+    void convert(const GemvMemory<OtherType> &other)
     {
         convert_with(other,
                      [](OtherType val) { return static_cast<ValueType>(val); });
-    }
-
-    template <typename OtherType>
-    std::enable_if_t<!std::is_floating_point<OtherType>::value> convert(
-        const GemvMemory<OtherType> &other)
-    {
-        convert_with(other, [](OtherType val) {
-            return ValueType{
-                static_cast<typename ValueType::value_type>(val.v),
-                static_cast<typename ValueType::value_type>(val.e)};
-        });
     }
 
     template <typename OtherType, typename Callable>

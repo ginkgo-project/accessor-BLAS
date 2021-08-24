@@ -1,4 +1,3 @@
-#include <array>
 #include <cmath>
 #include <ios>
 #include <iostream>
@@ -7,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 
 #include "gemv_kernels.cuh"
@@ -15,6 +15,10 @@
 #include "utils.cuh"
 
 
+/**
+ * Reduces `tmp` in a binary tree fashion with the reduce operator `op`.
+ * Overwrites `tmp` in the process.
+ */
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
 {
@@ -38,18 +42,15 @@ OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
 }
 
 template <typename T>
-std::enable_if_t<std::is_floating_point<T>::value, T> get_value(T val)
+T get_value(T val)
 {
     return val;
 }
 
-template <typename T>
-std::enable_if_t<!std::is_floating_point<T>::value, typename T::value_type>
-get_value(T val)
-{
-    return val.e;
-}
-
+/**
+ * Compares `mtx1` to `mtx2` by computing: $tmp = abs(mtx1 - mtx2)$, followed by
+ * returning $norm1(tmp)$ (which overwrites `tmp`).
+ */
 template <typename ReferenceType, typename OtherType, typename ValueType>
 ValueType compare(const matrix_info info, const ReferenceType *mtx1,
                   const OtherType *mtx2, ValueType *tmp)
@@ -62,14 +63,8 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
         const std::size_t midx = row * info.stride;
         const auto v1 = get_value(mtx1[midx]);
         const decltype(v1) v2 = get_value(mtx2[midx]);
-        if (std::is_floating_point<decltype(v1)>::value) {
-            const auto delta = std::abs(v1 - v2);
-            tmp[midx] = delta;
-        } else {
-            // only compute the 1-norm of the error
-            const auto error = std::abs(v2);
-            tmp[midx] = error;
-        }
+        const auto delta = std::abs(v1 - v2);
+        tmp[midx] = delta;
     }
 
     return reduce<ValueType>(
@@ -158,13 +153,12 @@ int main(int argc, char **argv)
     std::cout.precision(16);
     std::cout << std::scientific;
 
-    constexpr std::size_t benchmark_num{7};
     constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string,
                    std::function<void(matrix_info, matrix_info, matrix_info)>,
                    std::function<value_type(matrix_info)>>;
-    std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+    std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{
             "GEMV fp64",
             [&](matrix_info m_info, matrix_info x_info, matrix_info res_info) {
@@ -224,6 +218,7 @@ int main(int argc, char **argv)
             },
             st_compute_error},
     };
+    const std::size_t benchmark_num{benchmark_info.size()};
 
     std::cout << "Num rows";
     for (const auto &info : benchmark_info) {
@@ -238,11 +233,12 @@ int main(int argc, char **argv)
     std::cout.precision(16);
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
+
+    std::vector<value_type> local_res(benchmark_num);
     constexpr auto start = 100;
     constexpr auto row_incr = start;
     for (std::size_t num_rows = start; num_rows <= max_rows;
          num_rows += row_incr) {
-        std::array<value_type, benchmark_num> local_res{};
         const matrix_info m_info{{num_rows, num_rows}, max_rows};
         const matrix_info x_info{{num_rows, 1}};
         const matrix_info res_info{{num_rows, 1}};
@@ -250,15 +246,15 @@ int main(int argc, char **argv)
         if (measure_error) {
             std::get<1>(benchmark_info[benchmark_reference])(m_info, x_info,
                                                              res_info);
-            cpu_res_ref = ar_data.gpu_res_memory();
+            cpu_res_ref.copy_from(ar_data.gpu_res_memory());
             if (normalize_error) {
                 res_ref_norm = reduce<value_type>(
                     res_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
                         return std::abs(a) + std::abs(b);
                     });
                 // copy again since the reduce operation overwrites
-                cpu_res_ref = ar_data.gpu_res_memory();
-                ar_data.gpu_res_memory() = ar_cpu_res_init;
+                cpu_res_ref.copy_from(ar_data.gpu_res_memory());
+                ar_data.gpu_res_memory().copy_from(ar_cpu_res_init);
             }
         }
         for (std::size_t i = 0; i < benchmark_num; ++i) {

@@ -30,7 +30,6 @@ __global__ __launch_bounds__(block_size) void gemv(
         return;
     }
     const std::int64_t row_start = row_idx * minfo.stride;
-    // can't use array with `error_type`
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
 
@@ -62,7 +61,7 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
                                                        ArType beta,
                                                        ResRange res)
 {
-    using ar_type = decltype(mtx(0, 0) + mtx(0, 0));
+    using ar_type = decltype(alpha * mtx(0, 0) * x(0, 0) + beta * res(0, 0));
     static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
     // expect x_info.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};

@@ -1,4 +1,3 @@
-#include <array>
 #include <cmath>
 #include <functional>
 #include <iomanip>
@@ -6,6 +5,7 @@
 #include <iostream>
 #include <random>
 #include <type_traits>
+#include <vector>
 
 
 #include "dot_kernels.cuh"
@@ -54,12 +54,11 @@ int main(int argc, char **argv)
         return static_cast<ar_type>(st_data.get_result());
     };
 
-    constexpr std::size_t benchmark_num{7};
     constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<value_type()>>;
-    std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+    std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"DOT fp64",
                          [&](matrix_info x_info, matrix_info y_info) {
                              dot(device_prop, x_info, ar_data.gpu_x(), y_info,
@@ -107,6 +106,7 @@ int main(int argc, char **argv)
                                         st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result}};
+    const std::size_t benchmark_num{benchmark_info.size()};
 
     std::cout << "Vector Size";
     if (!detailed_error) {
@@ -129,14 +129,22 @@ int main(int argc, char **argv)
     auto get_error = [](value_type res, value_type ref_res) -> value_type {
         return std::abs(res - ref_res) / std::abs(ref_res);
     };
+
+    // Number of elements of a vector at the start of the benchmark
     constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
+    // Increase in number of elements between consecutive benchmark runs
     constexpr std::size_t row_incr = 2'000'000;
+    // Number of benchmark runs (ignoring randomization)
     constexpr std::size_t steps = (max_size - start) / row_incr;
+    // Number of benchmark restarts with a different randomization for vectors
+    // Only used for a detailed error run
     constexpr std::size_t randomize_num{10};
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
     std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
+    // stores the result for all different benchmark runs to compute the error
+    std::vector<value_type> raw_result(benchmark_num);
 
     for (std::size_t randomize = 0;
          (detailed_error && randomize < randomize_num) ||
@@ -156,7 +164,6 @@ int main(int argc, char **argv)
             const matrix_info x_info{{vec_size, 1}};
             const matrix_info y_info{{vec_size, 1}};
 
-            std::array<value_type, benchmark_num> raw_result{};
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 const std::size_t idx = i * benchmark_num + bi;
                 auto curr_lambda = [&]() {
