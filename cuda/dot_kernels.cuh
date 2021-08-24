@@ -45,7 +45,6 @@ __global__ __launch_bounds__(block_size) void dot(
     const auto group = cg::this_thread_block();
     const auto local_id = group.thread_rank();
 
-    // can't use array with `error_type`
     __shared__ char shared_impl[sizeof(ValueType) * block_size];
     auto shared = reinterpret_cast<ValueType *>(shared_impl);
 
@@ -68,7 +67,7 @@ template <std::int64_t block_size, typename XRange, typename YRange,
 __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
                                                       ArType *__restrict__ res)
 {
-    using ar_type = decltype(x(0, 0) + x(0, 0));
+    using ar_type = decltype(x(0, 0) + y(0, 0));
     // Here, using int64 results in better performance since the stride in the
     // accessors is stored in uint64
     using index_type = std::int64_t;
@@ -81,7 +80,6 @@ __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
     const auto group = cg::this_thread_block();
     const auto local_id = group.thread_rank();
 
-    // can't use array with `error_type`
     __shared__ char shared_impl[sizeof(ar_type) * block_size];
     auto shared = reinterpret_cast<ar_type *>(shared_impl);
 

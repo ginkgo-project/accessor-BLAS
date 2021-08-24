@@ -1,4 +1,3 @@
-#include <array>
 #include <cmath>
 #include <ios>
 #include <iostream>
@@ -8,6 +7,7 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 
 #include "memory.cuh"
@@ -153,12 +153,11 @@ int main(int argc, char **argv)
 
     // Setting up names and associated benchmark and error functions
 
-    constexpr std::size_t benchmark_num{7};
     constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<value_type(matrix_info)>>;
-    std::array<benchmark_info_t, benchmark_num> benchmark_info = {
+    std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
                              trsv_3(m_info, t_matrix_type, d_matrix_type,
@@ -214,6 +213,7 @@ int main(int argc, char **argv)
                          },
                          st_compute_error},
     };
+    const std::size_t benchmark_num{benchmark_info.size()};
 
     std::cout << "Num rows";
     for (const auto &info : benchmark_info) {
@@ -229,8 +229,8 @@ int main(int argc, char **argv)
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
 
+    std::vector<value_type> local_res(benchmark_num);
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
-        std::array<value_type, benchmark_num> local_res{};
         const matrix_info m_info{{num_rows, num_rows}, max_cols};
         const matrix_info x_info{{num_rows, 1}};
 

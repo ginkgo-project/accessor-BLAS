@@ -69,22 +69,10 @@ public:
 
 private:
     template <typename OtherType>
-    std::enable_if_t<std::is_floating_point<OtherType>::value> convert(
-        const DotMemory<OtherType> &other)
+    void convert(const DotMemory<OtherType> &other)
     {
         convert_with(other,
                      [](OtherType val) { return static_cast<ValueType>(val); });
-    }
-
-    template <typename OtherType>
-    std::enable_if_t<!std::is_floating_point<OtherType>::value> convert(
-        const DotMemory<OtherType> &other)
-    {
-        convert_with(other, [](OtherType val) {
-            return ValueType{
-                static_cast<typename ValueType::value_type>(val.v),
-                static_cast<typename ValueType::value_type>(val.e)};
-        });
     }
 
     template <typename OtherType, typename Callable>
