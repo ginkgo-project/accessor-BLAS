@@ -109,7 +109,7 @@ int main(int argc, char **argv)
     constexpr std::size_t row_incr = start;
 
     std::default_random_engine rengine(42);
-    std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
     auto vector_dist = mtx_dist;
     auto cpu_mtx_gen = [&](matrix_info m_info) {
         return gen_mtx<ar_type>(m_info, mtx_dist, rengine);
