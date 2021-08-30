@@ -20,6 +20,8 @@ h_dict_gemv_runtime = {
         "cublas_fp64": "CUBLAS GEMV fp64",
         "cublas_fp32": "CUBLAS GEMV fp32",
         }
+h_dict_gemv_runtime2 = h_dict_gemv_runtime.copy()
+h_dict_gemv_runtime2["size"] = "Num rows"
 
 h_dict_gemv_error = {
         "size" : "Num Rows",
@@ -29,6 +31,8 @@ h_dict_gemv_error = {
         "cublas_fp64": "Error CUBLAS GEMV fp64",
         "cublas_fp32": "Error CUBLAS GEMV fp32",
         }
+h_dict_gemv_error2= h_dict_gemv_error.copy()
+h_dict_gemv_error2["size"] = "Num rows"
 
 h_dict_dot_runtime = {
         "size" : "Vector Size",
@@ -220,6 +224,34 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
+            "file": "./results/20210829_1839_v100_gemv_time_ms_0,1.csv",
+            "header_trans": h_dict_gemv_runtime2,
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "gemv_flops_0,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "GEMV ",
+            "conv_func": gemv_compute_flop,
+            "xlabel": "Number of rows",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+            #"xlim": {"left": None, "right": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
+        },
+        {
+            "file": "./results/20210829_1839_v100_gemv_error_0,1.csv",
+            "header_trans": h_dict_gemv_error2,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "gemv_error_0,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "GEMV ",
+            "conv_func": gemv_compute_error,
+            "xlabel": "Number of rows",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
             "file": "./results/20210526_1201_a100_gemv_time_ms.csv",
             "header_trans": h_dict_gemv_runtime,
             "plot_order": plot_order_flops,
@@ -268,6 +300,34 @@ plot_dict_list = [
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
             "plot_name": "trsv_error",
+            "plot_prefix": "v100_",
+            "label_prefix": "TRSV ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Number of rows",
+            "ylabel": "Relative error",
+            "yscale": "log",
+        },
+        {
+            "file": "./results/20210829_1839_v100_trsv_time_ms_0,1.csv",
+            "header_trans": h_dict_trsv_runtime,
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "trsv_flops_0,1",
+            "plot_prefix": "v100_",
+            "label_prefix": "TRSV ",
+            "conv_func": trsv_compute_flop,
+            "xlabel": "Number of rows",
+            "ylabel": "GFLOP/s",
+            "yscale": "linear",
+            #"xlim": {"left": None, "right": None,},
+            #"ylim": {"bottom": 0, "top": 225,},
+        },
+        {
+            "file": "./results/20210829_1839_v100_trsv_error_0,1.csv",
+            "header_trans": h_dict_trsv_error,
+            "plot_order": plot_order_error,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "trsv_error_0,1",
             "plot_prefix": "v100_",
             "label_prefix": "TRSV ",
             "conv_func": lambda sz, error: error,
@@ -349,7 +409,7 @@ plot_dict_list = [
         },
         {
             #"file": "./results/2021020210512_0843_v100_dot_error_avg_0,1.csv",
-            "file": "./results/20210526_1503_v100_dot_error_0,1.csv",
+            "file": "./results/20210829_1839_v100_dot_error_0,1.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -379,7 +439,7 @@ plot_dict_list = [
         },
         {
             #"file": "./results/20210526_1201_a100_dot_error.csv",
-            "file": "./results/20210527_1125_a100_dot_-1,1_error.csv",
+            "file": "./results/20210527_1125_a100_dot_-1,1.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
