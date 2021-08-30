@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <iomanip>
@@ -146,11 +147,17 @@ int main(int argc, char **argv)
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
-    std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
+    // std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
     // stores the result for all different benchmark runs to compute the error
     const auto actual_randomize_num = detailed_error ? randomize_num : 1;
     std::vector<value_type> raw_result(actual_randomize_num * (steps + 1) *
                                        benchmark_num);
+    const auto get_raw_idx = [benchmark_num, actual_randomize_num](
+                                 std::size_t rnd, std::size_t step,
+                                 std::size_t bi) {
+        return step * actual_randomize_num * benchmark_num +
+               bi * actual_randomize_num + rnd;
+    };
 
     for (std::size_t randomize = 0;
          (detailed_error && randomize < randomize_num) ||
@@ -166,8 +173,6 @@ int main(int argc, char **argv)
         }
         for (std::size_t vec_size = start, i = 0; vec_size <= max_size;
              vec_size += row_incr, ++i) {
-            const auto result_base_idx =
-                randomize * (steps + 1) * benchmark_num + i * benchmark_num;
             benchmark_vec_size.at(i) = vec_size;
             const matrix_info x_info{{vec_size, 1}};
             const matrix_info y_info{{vec_size, 1}};
@@ -179,16 +184,16 @@ int main(int argc, char **argv)
                 };
                 benchmark_time.at(idx) =
                     benchmark_function(curr_lambda, detailed_error);
-                const auto result_idx = result_base_idx + bi;
-                raw_result[result_idx] = std::get<2>(benchmark_info[bi])();
+                raw_result[get_raw_idx(randomize, i, bi)] =
+                    std::get<2>(benchmark_info[bi])();
             }
-            const value_type result_ref =
-                raw_result[result_base_idx + benchmark_reference];
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-                const std::size_t idx = i * benchmark_num + bi;
-                benchmark_error.at(idx) +=
-                    get_error(raw_result[result_base_idx + bi], result_ref);
-            }
+            // const auto result_ref =
+            //    raw_result[get_raw_idx(randomize, i, benchmark_reference)];
+            // for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+            //    const std::size_t idx = i * benchmark_num + bi;
+            //    benchmark_error.at(idx) +=
+            //        get_error(raw_result[get_raw_idx(bi)], result_ref);
+            //}
         }
     }
     for (std::size_t i = 0; i <= steps; ++i) {
@@ -197,16 +202,36 @@ int main(int argc, char **argv)
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 std::cout << DELIM << benchmark_time[i * benchmark_num + bi];
             }
+            const auto result_ref =
+                raw_result[get_raw_idx(0, i, benchmark_reference)];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-                std::cout << DELIM << benchmark_error[i * benchmark_num + bi];
+                std::cout << DELIM
+                          << get_error(raw_result[i * benchmark_num + bi],
+                                       result_ref);
             }
             std::cout << '\n';
         } else {
             std::cout << benchmark_vec_size[i];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-                std::cout << DELIM
-                          << benchmark_error[i * benchmark_num + bi] /
-                                 static_cast<value_type>(randomize_num);
+                // sort and compute the median
+                std::array<value_type, randomize_num> local_error;
+                for (std::size_t rnd = 0; rnd < randomize_num; ++rnd) {
+                    const auto result_ref =
+                        raw_result[get_raw_idx(rnd, i, benchmark_reference)];
+                    local_error[rnd] = get_error(
+                        raw_result[get_raw_idx(rnd, i, bi)], result_ref);
+                }
+                std::sort(local_error.begin(), local_error.end());
+                value_type median{};
+                if (randomize_num % 2 == 1) {
+                    median = local_error[randomize_num / 2];
+                } else {
+                    const auto begin_middle = randomize_num / 2 - 1;
+                    median = (local_error[begin_middle] +
+                              local_error[begin_middle + 1]) /
+                             2.0;
+                }
+                std::cout << DELIM << median;
             }
             std::cout << '\n';
         }
@@ -215,14 +240,12 @@ int main(int argc, char **argv)
         return 0;
     }
     std::cout << "--------------------------------------------------\n";
-    for (std::size_t randomize = 0; randomize < randomize_num; ++randomize) {
-        for (std::size_t i = 0; i <= steps; ++i) {
-            const auto result_base_idx =
-                randomize * (steps + 1) * benchmark_num + i * benchmark_num;
-
+    for (std::size_t i = 0; i <= steps; ++i) {
+        for (std::size_t randomize = 0; randomize < randomize_num;
+             ++randomize) {
             std::cout << randomize << DELIM << benchmark_vec_size[i];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-                std::cout << DELIM << raw_result[result_base_idx + bi];
+                std::cout << DELIM << raw_result[get_raw_idx(randomize, i, bi)];
             }
             std::cout << '\n';
         }
