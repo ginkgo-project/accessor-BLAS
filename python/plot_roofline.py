@@ -439,7 +439,8 @@ plot_dict_list = [
         },
         {
             #"file": "./results/20210526_1201_a100_dot_error.csv",
-            "file": "./results/20210527_1125_a100_dot_-1,1.csv",
+            #"file": "./results/20210527_1125_a100_dot_-1,1.csv",
+            "file": "./results/20210830_1230_a100_dot_error_-1,1.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
