@@ -148,7 +148,9 @@ int main(int argc, char **argv)
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
     std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
     // stores the result for all different benchmark runs to compute the error
-    std::vector<value_type> raw_result(benchmark_num);
+    const auto actual_randomize_num = detailed_error ? randomize_num : 1;
+    std::vector<value_type> raw_result(actual_randomize_num * (steps + 1) *
+                                       benchmark_num);
 
     for (std::size_t randomize = 0;
          (detailed_error && randomize < randomize_num) ||
@@ -164,6 +166,8 @@ int main(int argc, char **argv)
         }
         for (std::size_t vec_size = start, i = 0; vec_size <= max_size;
              vec_size += row_incr, ++i) {
+            const auto result_base_idx =
+                randomize * (steps + 1) * benchmark_num + i * benchmark_num;
             benchmark_vec_size.at(i) = vec_size;
             const matrix_info x_info{{vec_size, 1}};
             const matrix_info y_info{{vec_size, 1}};
@@ -175,13 +179,15 @@ int main(int argc, char **argv)
                 };
                 benchmark_time.at(idx) =
                     benchmark_function(curr_lambda, detailed_error);
-                raw_result[bi] = std::get<2>(benchmark_info[bi])();
+                const auto result_idx = result_base_idx + bi;
+                raw_result[result_idx] = std::get<2>(benchmark_info[bi])();
             }
-            const value_type result_ref = raw_result[benchmark_reference];
+            const value_type result_ref =
+                raw_result[result_base_idx + benchmark_reference];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 const std::size_t idx = i * benchmark_num + bi;
                 benchmark_error.at(idx) +=
-                    get_error(raw_result[bi], result_ref);
+                    get_error(raw_result[result_base_idx + bi], result_ref);
             }
         }
     }
@@ -201,6 +207,22 @@ int main(int argc, char **argv)
                 std::cout << DELIM
                           << benchmark_error[i * benchmark_num + bi] /
                                  static_cast<value_type>(randomize_num);
+            }
+            std::cout << '\n';
+        }
+    }
+    if (!detailed_error) {
+        return 0;
+    }
+    std::cout << "--------------------------------------------------\n";
+    for (std::size_t randomize = 0; randomize < randomize_num; ++randomize) {
+        for (std::size_t i = 0; i <= steps; ++i) {
+            const auto result_base_idx =
+                randomize * (steps + 1) * benchmark_num + i * benchmark_num;
+
+            std::cout << randomize << DELIM << benchmark_vec_size[i];
+            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+                std::cout << DELIM << raw_result[result_base_idx + bi];
             }
             std::cout << '\n';
         }
