@@ -38,7 +38,7 @@ int main(int argc, char **argv)
         return 1;
     }
     std::default_random_engine rengine(42);
-    std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> vector_dist(-1.0, 1.0);
 
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
     auto st_data = DotMemory<st_type>(ar_data);
