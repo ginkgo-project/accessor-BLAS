@@ -240,6 +240,11 @@ int main(int argc, char **argv)
         return 0;
     }
     std::cout << "--------------------------------------------------\n";
+    std::cout << "Random iter" << DELIM << "Vector Size";
+    for (const auto &info : benchmark_info) {
+        std::cout << DELIM << "Result" << std::get<0>(info);
+    }
+    std::cout << '\n';
     for (std::size_t i = 0; i <= steps; ++i) {
         for (std::size_t randomize = 0; randomize < randomize_num;
              ++randomize) {
