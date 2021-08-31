@@ -63,15 +63,15 @@ __global__ __launch_bounds__(block_size) void dot(
 // Currently, x and y need to be 2D to also have a proper stride parameter
 // (lowest-dim must always be 0)
 template <std::int64_t block_size, typename XRange, typename YRange,
-          typename ArType>
+          typename ResType>
 __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
-                                                      ArType *__restrict__ res)
+                                                      ResType *__restrict__ res)
 {
     using ar_type = decltype(x(0, 0) + y(0, 0));
     // Here, using int64 results in better performance since the stride in the
     // accessors is stored in uint64
     using index_type = std::int64_t;
-    static_assert(std::is_same<ArType, ar_type>::value, "Types must be equal!");
+    //static_assert(std::is_same<ResType, ar_type>::value, "Types must be equal!");
 
     const index_type start = blockIdx.x * blockDim.x + threadIdx.x;
     const index_type increment = blockDim.x * gridDim.x;
@@ -89,7 +89,7 @@ __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
     shared[local_id] = local_result;
     reduce(group, shared, [](ar_type a, ar_type b) { return a + b; });
     if (local_id == 0) {
-        atomic_add(res, shared[local_id]);
+        atomic_add(res, static_cast<ResType>(shared[local_id]));
     }
 }
 
@@ -128,10 +128,10 @@ void dot(const cudaDeviceProp &prop, const matrix_info x_info,
                           static_cast<std::int32_t>(y_info.stride), res);
 }
 
-template <typename ArType, typename StType>
+template <typename ArType, typename StType, typename ResType>
 void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
              const StType *x, const matrix_info y_info, const StType *y,
-             ArType *res)
+             ResType *res)
 {
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
