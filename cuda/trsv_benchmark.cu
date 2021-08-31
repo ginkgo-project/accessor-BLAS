@@ -110,12 +110,25 @@ int main(int argc, char **argv)
     constexpr std::size_t row_incr = start;
 
     std::default_random_engine rengine(42);
+    /*
     std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
     auto vector_dist = mtx_dist;
 
     std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
               << "); vector: [" << vector_dist.a() << ',' << vector_dist.b()
               << "); Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
+    /*/
+    std::normal_distribution<value_type> mtx_dist(0.0, 1.0);
+    auto vector_dist = mtx_dist;
+
+    std::cout << "Distribution matrix: "
+              << "mean: " << mtx_dist.mean()
+              << ", stddev: " << mtx_dist.stddev() << ";"
+              << "vector: ["
+              << "mean: " << vector_dist.mean()
+              << ", stddev: " << vector_dist.stddev() << ";"
+              << "Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
+    //*/
 
     auto cpu_mtx_gen = [&](matrix_info m_info) {
         return gen_mtx<ar_type>(m_info, mtx_dist, rengine);

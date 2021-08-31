@@ -40,11 +40,21 @@ int main(int argc, char **argv)
         return 1;
     }
     std::default_random_engine rengine(42);
+    /*
     std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
 
     std::cout << "Distribution vector: [" << vector_dist.a() << ','
               << vector_dist.b() << "); Type: " << typeid(vector_dist).name()
               << "\n";
+    /*/
+    std::normal_distribution<value_type> mtx_dist(0.0, 1.0);
+    auto vector_dist = mtx_dist;
+
+    std::cout << "Distribution vector: "
+              << "mean: " << vector_dist.mean()
+              << ", stddev: " << vector_dist.stddev() << ";"
+              << "Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
+    //*/
 
 
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
