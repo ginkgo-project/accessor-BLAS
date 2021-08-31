@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <typeinfo>
 #include <vector>
 
 
@@ -111,6 +112,11 @@ int main(int argc, char **argv)
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
     auto vector_dist = mtx_dist;
+
+    std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
+              << "); vector: [" << vector_dist.a() << ',' << vector_dist.b()
+              << "); Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
+
     auto cpu_mtx_gen = [&](matrix_info m_info) {
         return gen_mtx<ar_type>(m_info, mtx_dist, rengine);
     };
@@ -214,10 +220,6 @@ int main(int argc, char **argv)
                          st_compute_error},
     };
     const std::size_t benchmark_num{benchmark_info.size()};
-
-    std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
-              << "); vector: [" << vector_dist.a() << ',' << vector_dist.b()
-              << ")\n";
 
     std::cout << "Num rows";
     for (const auto &info : benchmark_info) {

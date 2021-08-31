@@ -7,8 +7,8 @@ function(create_cuda_executable target target_source)
         ${target_source}
         )
 
-    # The CUDA architecture should be chosen with the `CUDA_CUDA_ARCHITECTURES`
-    # built into CMake
+    # The CUDA architecture should be chosen with the `CMAKE_CUDA_ARCHITECTURES`,
+    # which is built into CMake
     target_compile_options("${target}" PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
         )
