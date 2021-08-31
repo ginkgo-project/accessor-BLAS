@@ -6,6 +6,7 @@
 #include <iostream>
 #include <random>
 #include <type_traits>
+#include <typeinfo>
 #include <vector>
 
 
@@ -41,6 +42,11 @@ int main(int argc, char **argv)
     std::default_random_engine rengine(42);
     std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
 
+    std::cout << "Distribution vector: [" << vector_dist.a() << ','
+              << vector_dist.b() << "); Type: " << typeid(vector_dist).name()
+              << "\n";
+
+
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
     auto st_data = DotMemory<st_type>(ar_data);
 
@@ -61,28 +67,28 @@ int main(int argc, char **argv)
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"DOT fp64",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             dot(my_handle.get(), x_info, ar_data.gpu_x(), y_info,
-                                 ar_data.gpu_y(), ar_data.gpu_res());
+                             dot(my_handle.get(), x_info, ar_data.gpu_x(),
+                                 y_info, ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT fp32",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             dot(my_handle.get(), x_info, st_data.gpu_x(), y_info,
-                                 st_data.gpu_y(), st_data.gpu_res());
+                             dot(my_handle.get(), x_info, st_data.gpu_x(),
+                                 y_info, st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp64>",
                          [&](matrix_info x_info, matrix_info y_info) {
                              acc_dot<double>(
-                                 my_handle.get(), x_info, ar_data.gpu_x(), y_info,
-                                 ar_data.gpu_y(), ar_data.gpu_res());
+                                 my_handle.get(), x_info, ar_data.gpu_x(),
+                                 y_info, ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
                              acc_dot<double>(
-                                 my_handle.get(), x_info, st_data.gpu_x(), y_info,
-                                 st_data.gpu_y(), st_data.gpu_res());
+                                 my_handle.get(), x_info, st_data.gpu_x(),
+                                 y_info, st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp32, fp32>",
@@ -107,9 +113,6 @@ int main(int argc, char **argv)
                          },
                          st_get_result}};
     const std::size_t benchmark_num{benchmark_info.size()};
-
-    std::cout << "Distribution vector: [" << vector_dist.a() << ','
-              << vector_dist.b() << ")\n";
 
 
     std::cout << "Vector Size";
