@@ -47,8 +47,7 @@ int main(int argc, char **argv)
     auto cublas_handle = cublas_get_handle();
     cublas_set_device_ptr_mode(cublas_handle.get());
 
-    cudaDeviceProp device_prop;
-    CUDA_CALL(cudaGetDeviceProperties(&device_prop, 0));
+    auto my_handle = std::make_unique<myBlasHandle>();
 
     auto ar_get_result = [&ar_data]() { return ar_data.get_result(); };
     auto st_get_result = [&st_data]() {
@@ -62,33 +61,33 @@ int main(int argc, char **argv)
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"DOT fp64",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             dot(device_prop, x_info, ar_data.gpu_x(), y_info,
+                             dot(my_handle.get(), x_info, ar_data.gpu_x(), y_info,
                                  ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT fp32",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             dot(device_prop, x_info, st_data.gpu_x(), y_info,
+                             dot(my_handle.get(), x_info, st_data.gpu_x(), y_info,
                                  st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp64>",
                          [&](matrix_info x_info, matrix_info y_info) {
                              acc_dot<double>(
-                                 device_prop, x_info, ar_data.gpu_x(), y_info,
+                                 my_handle.get(), x_info, ar_data.gpu_x(), y_info,
                                  ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
                              acc_dot<double>(
-                                 device_prop, x_info, st_data.gpu_x(), y_info,
+                                 my_handle.get(), x_info, st_data.gpu_x(), y_info,
                                  st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp32, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot<float>(device_prop, x_info,
+                             acc_dot<float>(my_handle.get(), x_info,
                                             st_data.gpu_x(), y_info,
                                             st_data.gpu_y(), st_data.gpu_res());
                          },
