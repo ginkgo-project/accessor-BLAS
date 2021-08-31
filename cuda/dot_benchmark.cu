@@ -74,23 +74,23 @@ int main(int argc, char **argv)
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp64>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot(device_prop, x_info, ar_data.gpu_x(),
-                                     y_info, ar_data.gpu_y(),
-                                     ar_data.gpu_res());
+                             acc_dot<double>(
+                                 device_prop, x_info, ar_data.gpu_x(), y_info,
+                                 ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot(device_prop, x_info, st_data.gpu_x(),
-                                     y_info, st_data.gpu_y(),
-                                     ar_data.gpu_res());
+                             acc_dot<double>(
+                                 device_prop, x_info, st_data.gpu_x(), y_info,
+                                 st_data.gpu_y(), st_data.gpu_res());
                          },
-                         ar_get_result},
+                         st_get_result},
         benchmark_info_t{"DOT Acc<fp32, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot(device_prop, x_info, st_data.gpu_x(),
-                                     y_info, st_data.gpu_y(),
-                                     st_data.gpu_res());
+                             acc_dot<float>(device_prop, x_info,
+                                            st_data.gpu_x(), y_info,
+                                            st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"CUBLAS DOT fp64",
