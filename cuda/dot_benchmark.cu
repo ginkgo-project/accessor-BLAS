@@ -40,8 +40,8 @@ int main(int argc, char **argv)
         return 1;
     }
     std::default_random_engine rengine(42);
-    /*
-    std::uniform_real_distribution<value_type> vector_dist(0.0, 1.0);
+    //*
+    std::uniform_real_distribution<st_type> vector_dist(-1.0, 1.0);
 
     std::cout << "Distribution vector: [" << vector_dist.a() << ','
               << vector_dist.b() << "); Type: " << typeid(vector_dist).name()
@@ -155,13 +155,13 @@ int main(int argc, char **argv)
     constexpr std::size_t steps = (max_size - start) / row_incr;
     // Number of benchmark restarts with a different randomization for vectors
     // Only used for a detailed error run
-    constexpr std::size_t randomize_num{10};
+    constexpr std::size_t max_randomize_num{10};
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
     // std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
     // stores the result for all different benchmark runs to compute the error
-    const auto actual_randomize_num = detailed_error ? randomize_num : 1;
+    const auto actual_randomize_num = detailed_error ? max_randomize_num : 1;
     std::vector<value_type> raw_result(actual_randomize_num * (steps + 1) *
                                        benchmark_num);
     const auto get_raw_idx = [benchmark_num, actual_randomize_num](
@@ -171,9 +171,7 @@ int main(int argc, char **argv)
                bi * actual_randomize_num + rnd;
     };
 
-    for (std::size_t randomize = 0;
-         (detailed_error && randomize < randomize_num) ||
-         (!detailed_error && randomize < 1);
+    for (std::size_t randomize = 0; randomize < actual_randomize_num;
          ++randomize) {
         if (randomize != 0) {
             write_random({{max_size, 1}}, vector_dist, rengine,
@@ -226,8 +224,8 @@ int main(int argc, char **argv)
             std::cout << benchmark_vec_size[i];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 // sort and compute the median
-                std::array<value_type, randomize_num> local_error;
-                for (std::size_t rnd = 0; rnd < randomize_num; ++rnd) {
+                std::array<value_type, max_randomize_num> local_error;
+                for (std::size_t rnd = 0; rnd < actual_randomize_num; ++rnd) {
                     const auto result_ref =
                         raw_result[get_raw_idx(rnd, i, benchmark_reference)];
                     local_error[rnd] = get_error(
@@ -235,10 +233,10 @@ int main(int argc, char **argv)
                 }
                 std::sort(local_error.begin(), local_error.end());
                 value_type median{};
-                if (randomize_num % 2 == 1) {
-                    median = local_error[randomize_num / 2];
+                if (actual_randomize_num % 2 == 1) {
+                    median = local_error[actual_randomize_num / 2];
                 } else {
-                    const auto begin_middle = randomize_num / 2 - 1;
+                    const auto begin_middle = actual_randomize_num / 2 - 1;
                     median = (local_error[begin_middle] +
                               local_error[begin_middle + 1]) /
                              2.0;
@@ -258,7 +256,7 @@ int main(int argc, char **argv)
     }
     std::cout << '\n';
     for (std::size_t i = 0; i <= steps; ++i) {
-        for (std::size_t randomize = 0; randomize < randomize_num;
+        for (std::size_t randomize = 0; randomize < actual_randomize_num;
              ++randomize) {
             std::cout << randomize << DELIM << benchmark_vec_size[i];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
