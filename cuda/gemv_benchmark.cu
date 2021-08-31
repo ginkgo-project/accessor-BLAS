@@ -106,7 +106,7 @@ int main(int argc, char **argv)
     constexpr char DELIM{';'};
 
     std::default_random_engine rengine(42);
-    std::uniform_real_distribution<value_type> mtx_dist(0.0, 1.0);
+    std::uniform_real_distribution<value_type> mtx_dist(-1.0, 1.0);
     auto vector_dist = mtx_dist;
     
     std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
