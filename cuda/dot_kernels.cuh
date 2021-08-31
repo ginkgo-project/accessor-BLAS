@@ -18,6 +18,33 @@ constexpr int grids_per_sm{32};
 constexpr int dot_block_size{1024};
 
 
+class myBlasHandle {
+public:
+    myBlasHandle()
+    {
+        CUDA_CALL(cudaGetDeviceProperties(&device_prop_, 0));
+        CUDA_CALL(cudaMalloc(&device_storage_, device_storage_size_bytes_));
+    }
+
+    const cudaDeviceProp &get_device_property() const { return device_prop_; }
+
+    template <typename T>
+    T *get_device_value_ptr()
+    {
+        static_assert(sizeof(T) < device_storage_size_bytes_,
+                      "The expected type is too large for the device storage!");
+        return reinterpret_cast<T *>(device_storage_);
+    }
+
+    ~myBlasHandle() { cudaFree(&device_storage_); }
+
+private:
+    static constexpr std::size_t device_storage_size_bytes_{16};
+    cudaDeviceProp device_prop_;
+    void *device_storage_;
+};
+
+
 namespace kernel {
 
 
@@ -71,7 +98,8 @@ __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
     // Here, using int64 results in better performance since the stride in the
     // accessors is stored in uint64
     using index_type = std::int64_t;
-    //static_assert(std::is_same<ResType, ar_type>::value, "Types must be equal!");
+    // static_assert(std::is_same<ResType, ar_type>::value, "Types must be
+    // equal!");
 
     const index_type start = blockIdx.x * blockDim.x + threadIdx.x;
     const index_type increment = blockDim.x * gridDim.x;
@@ -94,6 +122,14 @@ __global__ __launch_bounds__(block_size) void acc_dot(XRange x, YRange y,
 }
 
 
+template <typename InType, typename OutType>
+__global__ __launch_bounds__(1) void cast_result(const InType *__restrict__ in,
+                                                 OutType *__restrict__ out)
+{
+    *out = static_cast<OutType>(*in);
+}
+
+
 }  // namespace kernel
 
 
@@ -113,13 +149,13 @@ void control_dot(const matrix_info x_info, const ValueType *x,
 }
 
 template <typename ValueType>
-void dot(const cudaDeviceProp &prop, const matrix_info x_info,
-         const ValueType *x, const matrix_info y_info, const ValueType *y,
-         ValueType *res)
+void dot(myBlasHandle *handle, const matrix_info x_info, const ValueType *x,
+         const matrix_info y_info, const ValueType *y, ValueType *res)
 {
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
-    const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
+    const dim3 grid(
+        handle->get_device_property().multiProcessorCount * grids_per_sm, 1, 1);
 
     kernel::init_res<<<1, 1>>>(res);
     kernel::dot<block_size, ValueType>
@@ -129,13 +165,13 @@ void dot(const cudaDeviceProp &prop, const matrix_info x_info,
 }
 
 template <typename ArType, typename StType, typename ResType>
-void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
-             const StType *x, const matrix_info y_info, const StType *y,
-             ResType *res)
+void acc_dot(myBlasHandle *handle, const matrix_info x_info, const StType *x,
+             const matrix_info y_info, const StType *y, ResType *res)
 {
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
-    const dim3 grid(prop.multiProcessorCount * grids_per_sm, 1, 1);
+    const dim3 grid(
+        handle->get_device_property().multiProcessorCount * grids_per_sm, 1, 1);
 
     // Accessor Setup
     constexpr std::size_t dimensionality{2};
@@ -149,8 +185,22 @@ void acc_dot(const cudaDeviceProp &prop, const matrix_info x_info,
     auto x_acc = c_range(x_info.size, x, x_stride);
     auto y_acc = c_range(y_info.size, y, y_stride);
 
-    kernel::init_res<<<1, 1>>>(res);
-    kernel::acc_dot<block_size><<<grid, block>>>(x_acc, y_acc, res);
+    ArType *acc_dot_res{nullptr};
+    constexpr bool use_temporary_storage{!std::is_same<ArType, ResType>::value};
+    if (use_temporary_storage) {
+        acc_dot_res = handle->get_device_value_ptr<ArType>();
+    } else {
+        // reinterpret_cast only necessary to make compiler happy. They should
+        // be the same type.
+        acc_dot_res = reinterpret_cast<ArType *>(res);
+    }
+
+    kernel::init_res<<<1, 1>>>(acc_dot_res);
+    kernel::acc_dot<block_size><<<grid, block>>>(x_acc, y_acc, acc_dot_res);
+
+    if (use_temporary_storage) {
+        kernel::cast_result<<<1, 1>>>(acc_dot_res, res);
+    }
 }
 
 #define BIND_CUBLAS_DOT(ValueType, CublasName)                              \
