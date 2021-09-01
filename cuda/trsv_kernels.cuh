@@ -273,12 +273,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ValueType{1}
-                : (col <= row && global_row < m_info.size[0] &&
-                   global_col < m_info.size[1])
-                      ? mtx[global_row * m_info.stride + global_col]
-                      : ValueType{0};
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (col <= row && global_row < m_info.size[0] &&
+               global_col < m_info.size[1])
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -446,11 +445,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
         const index_type global_col =
             m_info.size[1] - (row_block_idx + 1) * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ValueType{1}
-                : (row <= col && 0 <= global_row && 0 <= global_col)
-                      ? mtx[global_row * m_info.stride + global_col]
-                      : ValueType{0};
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (row <= col && 0 <= global_row && 0 <= global_col)
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -663,12 +661,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ar_type{1}
-                : (col <= row && global_row < mtx.length(0) &&
-                   global_col < mtx.length(1))
-                      ? mtx(global_row, global_col)
-                      : ar_type{0};
+            (dmtx == dmtx_t::unit && col == row) ? ar_type{1}
+            : (col <= row && global_row < mtx.length(0) &&
+               global_col < mtx.length(1))
+                ? mtx(global_row, global_col)
+                : ar_type{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -835,11 +832,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
         const index_type global_col =
             mtx.length(1) - (row_block_idx + 1) * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ar_type{1}
-                : (row <= col && 0 <= global_row && 0 <= global_col)
-                      ? mtx(global_row, global_col)
-                      : ar_type{0};
+            (dmtx == dmtx_t::unit && col == row) ? ar_type{1}
+            : (row <= col && 0 <= global_row && 0 <= global_col)
+                ? mtx(global_row, global_col)
+                : ar_type{0};
     }
     group.sync();
     // Invert lower triangular matrix

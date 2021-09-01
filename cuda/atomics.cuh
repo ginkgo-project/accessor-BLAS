@@ -101,5 +101,10 @@ BIND_ATOMIC_ADD(float);
 // CUDA 8.0 starts suppoting 64-bit double atomicAdd on devices of compute
 // capability 6.x and higher
 BIND_ATOMIC_ADD(double);
+
+#else
+
+#warning "Atomic add for double not supported! Performance will be slower than expected!"
+
 #endif  // !((defined(CUDA_VERSION) && (CUDA_VERSION < 8000)) ||
         // (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 600)))

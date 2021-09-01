@@ -89,7 +89,7 @@ void print_mtx(const matrix_info &info, const ValueType *vec)
 {
     auto cout_flags = std::cout.flags();
     auto old_prec = std::cout.precision();
-    std::cout.precision(3);
+    std::cout.precision(7);
     // showpos: show + sign for positive numbers
     std::cout << std::fixed << std::showpos;
     for (std::size_t i = 0; i < info.size[0]; ++i) {
