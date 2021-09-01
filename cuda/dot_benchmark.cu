@@ -41,7 +41,7 @@ int main(int argc, char **argv)
     }
     std::default_random_engine rengine(42);
     //*
-    std::uniform_real_distribution<st_type> vector_dist(-1.0, 1.0);
+    std::uniform_real_distribution<ar_type> vector_dist(-1.0, 1.0);
 
     std::cout << "Distribution vector: [" << vector_dist.a() << ','
               << vector_dist.b() << "); Type: " << typeid(vector_dist).name()

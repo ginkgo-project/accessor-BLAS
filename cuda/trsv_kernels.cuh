@@ -273,12 +273,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ValueType{1}
-                : (col <= row && global_row < m_info.size[0] &&
-                   global_col < m_info.size[1])
-                      ? mtx[global_row * m_info.stride + global_col]
-                      : ValueType{0};
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (col <= row && global_row < m_info.size[0] &&
+               global_col < m_info.size[1])
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -446,11 +445,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
         const index_type global_col =
             m_info.size[1] - (row_block_idx + 1) * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ValueType{1}
-                : (row <= col && 0 <= global_row && 0 <= global_col)
-                      ? mtx[global_row * m_info.stride + global_col]
-                      : ValueType{0};
+            (dmtx == dmtx_t::unit && col == row) ? ValueType{1}
+            : (row <= col && 0 <= global_row && 0 <= global_col)
+                ? mtx[global_row * m_info.stride + global_col]
+                : ValueType{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -663,12 +661,11 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         const index_type global_row = row_block_idx * swarp_size + row;
         const index_type global_col = row_block_idx * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ar_type{1}
-                : (col <= row && global_row < mtx.length(0) &&
-                   global_col < mtx.length(1))
-                      ? mtx(global_row, global_col)
-                      : ar_type{0};
+            (dmtx == dmtx_t::unit && col == row) ? ar_type{1}
+            : (col <= row && global_row < mtx.length(0) &&
+               global_col < mtx.length(1))
+                ? mtx(global_row, global_col)
+                : ar_type{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -835,11 +832,10 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
         const index_type global_col =
             mtx.length(1) - (row_block_idx + 1) * swarp_size + col;
         triang[col * triang_stride + row] =
-            (dmtx == dmtx_t::unit && col == row)
-                ? ar_type{1}
-                : (row <= col && 0 <= global_row && 0 <= global_col)
-                      ? mtx(global_row, global_col)
-                      : ar_type{0};
+            (dmtx == dmtx_t::unit && col == row) ? ar_type{1}
+            : (row <= col && 0 <= global_row && 0 <= global_col)
+                ? mtx(global_row, global_col)
+                : ar_type{0};
     }
     group.sync();
     // Invert lower triangular matrix
@@ -1032,4 +1028,65 @@ void cublas_trsv(cublasHandle_t handle, tmtx_t ttype, dmtx_t dtype,
     cublas_trsv(
         handle, uplo, CUBLAS_OP_T, diag, static_cast<int>(m_info.size[0]), mtx,
         static_cast<int>(m_info.stride), x, static_cast<int>(x_info.stride));
+}
+
+
+namespace kernel {
+
+
+template <typename InType, typename OutType>
+__global__ __launch_bounds__(256) void copy_vector(
+    std::int64_t N, const InType *__restrict__ in, std::int64_t in_stride,
+    OutType *__restrict__ out, std::int64_t in_stride)
+{
+    const std::int64_t tidx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tidx < N) {
+        out[tidx * out_stride] = static_cast<OutType>(in[tidx * in_stride]);
+    }
+}
+
+// computes element wise: inout += in;
+template <typename InType, typename InOutType>
+__global__ __launch_bounds__(256) void update_vector(
+    std::int64_t N, const InType *__restrict__ in, std::int64_t in_stride,
+    InOutType *__restrict__ inout, std::int64_t inout_stride)
+{
+    const std::int64_t tidx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tidx < N) {
+        inout[tidx * out_stride] +=
+            static_cast<InOutType>(in[tidx * in_stride]);
+    }
+}
+
+
+}  // namespace kernel
+
+
+template <typename InType, typename OutType>
+copy_vector(const InType *in, const matrix_info i_info, OutType *out,
+            const matrix_info o_info)
+{
+    if (i_info.size[1] != o_info.size[1] || i_info.size[0] != o_info.size[0] ||
+        i_info.size[1] != 1) {
+        throw "Not supported!";
+    }
+    const dim3 block(256);
+    const dim3 grid(ceildiv(info.size[0], static_cast<std::size_t>(256)), 1, 1);
+    kernel::copy_vector<<<grid, block>>>(i_info.size[0], in, i_info.stride, out,
+                                         o_info.stride);
+}
+
+
+template <typename InType, typename InOutType>
+update_vector(const InType *in, const matrix_info i_info, InOutType *inout,
+              const matrix_info io_info)
+{
+    if (i_info.size[1] != io_info.size[1] || i_info.size[0] != io_info.size[0] ||
+        i_info.size[1] != 1) {
+        throw "Not supported!";
+    }
+    const dim3 block(256);
+    const dim3 grid(ceildiv(info.size[0], static_cast<std::size_t>(256)), 1, 1);
+    kernel::update_vector<<<grid, block>>>(i_info.size[0], in, i_info.stride,
+                                           inout, io_info.stride);
 }
