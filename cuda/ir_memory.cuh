@@ -139,6 +139,7 @@ public:
 
         int workspace_size{};
 
+        /*
         // Get workspace size requirement
         CUSOLVER_CALL(cusolverDnDgetrf_bufferSize(
             handle.get(), static_cast<int>(m_info_.size[0]),
@@ -154,6 +155,37 @@ public:
             static_cast<int>(m_info_.size[1]), gpu_mtx_.data(),
             static_cast<int>(m_info_.stride), gpu_workspace.data(),
             gpu_pivot.data(), gpu_info.data()));
+        /*/
+        static constexpr auto fCPU = Memory<float>::Device::cpu;
+        static constexpr auto fGPU = Memory<float>::Device::gpu;
+        Memory<float> cpu_mtx_sp(fCPU, cpu_mtx_.get_num_elems());
+        Memory<float> gpu_mtx_sp(fGPU, cpu_mtx_.get_num_elems());
+
+        convert_mtx(m_info_, orig_mtx.const_data(), cpu_mtx_sp.data(),
+                    [](ValueType val) { return static_cast<float>(val); });
+        gpu_mtx_sp.copy_from(cpu_mtx_sp);
+        // Get workspace size requirement
+        CUSOLVER_CALL(cusolverDnSgetrf_bufferSize(
+            handle.get(), static_cast<int>(m_info_.size[0]),
+            static_cast<int>(m_info_.size[1]), gpu_mtx_sp.data(),
+            static_cast<int>(m_info_.stride), &workspace_size));
+
+        Memory<float> gpu_sp_workspace(fGPU, workspace_size);
+
+        // Expects the matrix in column-major
+        // Run matrix factorization
+        CUSOLVER_CALL(cusolverDnSgetrf(
+            handle.get(), static_cast<int>(m_info_.size[0]),
+            static_cast<int>(m_info_.size[1]), gpu_mtx_sp.data(),
+            static_cast<int>(m_info_.stride), gpu_sp_workspace.data(),
+            gpu_pivot.data(), gpu_info.data()));
+
+        cpu_mtx_sp.copy_from(gpu_mtx_sp);
+
+        convert_mtx(m_info_, cpu_mtx_sp.data(), cpu_mtx_.data(),
+                    [](ValueType val) { return static_cast<float>(val); });
+        gpu_mtx_.copy_from(cpu_mtx_);
+        //*/
 
         cpu_pivot_.copy_from(gpu_pivot);
         cpu_info = gpu_info;
@@ -227,7 +259,7 @@ public:
     const ValueType *gpu_x_const() const { return gpu_x_.const_data(); }
     const ValueType *gpu_mtx() const { return gpu_mtx_const(); }
     const ValueType *gpu_x() const { return gpu_x_const(); }
-    
+
     Memory<ValueType> &gpu_mtx_memory() { return gpu_mtx_; }
 
     const matrix_info m_info_;

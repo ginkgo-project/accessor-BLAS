@@ -138,8 +138,6 @@ int main(int argc, char **argv)
     using st_type = float;
     using value_type = ar_type;
 
-    // constexpr tmtx_t t_matrix_type = tmtx_t::upper;
-    // constexpr dmtx_t d_matrix_type = dmtx_t::unit;
     constexpr tmtx_t t_matrix_type = tmtx_t::lower;
     constexpr dmtx_t d_matrix_type = dmtx_t::unit;
     constexpr tmtx_t t_matrix_type2 = invert(t_matrix_type);
