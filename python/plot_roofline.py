@@ -518,6 +518,26 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
+            "file": "./results/20210902_0300_ir_12000_error_u-1,1.csv",
+            "header_trans": {
+                    "size" : "Num rows",
+                    "fp64": "Res norm IR fp64",
+                    "fp32": "Res norm IR fp32",
+                    "acc_mix": "Res norm IR Acc<fp64, fp32>",
+                    "cublas_fp64": "Res norm CUBLAS IR fp64",
+                    "cublas_fp32": "Res norm CUBLAS IR fp32",
+                },
+            "plot_order": plot_order_flops,
+            "plot_detail": plot_detail_dict,
+            "plot_name": "ir_12000_u-1,1",
+            "plot_prefix": "",
+            "label_prefix": "IR ",
+            "conv_func": lambda sz, error: error,
+            "xlabel": "Iteration",
+            "ylabel": "Residual norm",
+            "yscale": "log",
+        },
+        {
             "file": "./results/20210524_1830_v100_trsv_progress_time_ms.csv",
             "header_trans": {
                 "size" : "Num rows",
