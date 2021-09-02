@@ -1037,7 +1037,7 @@ namespace kernel {
 template <typename InType, typename OutType>
 __global__ __launch_bounds__(256) void copy_vector(
     std::int64_t N, const InType *__restrict__ in, std::int64_t in_stride,
-    OutType *__restrict__ out, std::int64_t in_stride)
+    OutType *__restrict__ out, std::int64_t out_stride)
 {
     const std::int64_t tidx = blockIdx.x * blockDim.x + threadIdx.x;
     if (tidx < N) {
@@ -1053,7 +1053,7 @@ __global__ __launch_bounds__(256) void update_vector(
 {
     const std::int64_t tidx = blockIdx.x * blockDim.x + threadIdx.x;
     if (tidx < N) {
-        inout[tidx * out_stride] +=
+        inout[tidx * inout_stride] +=
             static_cast<InOutType>(in[tidx * in_stride]);
     }
 }
@@ -1063,7 +1063,7 @@ __global__ __launch_bounds__(256) void update_vector(
 
 
 template <typename InType, typename OutType>
-copy_vector(const InType *in, const matrix_info i_info, OutType *out,
+void copy_vector(const InType *in, const matrix_info i_info, OutType *out,
             const matrix_info o_info)
 {
     if (i_info.size[1] != o_info.size[1] || i_info.size[0] != o_info.size[0] ||
@@ -1071,14 +1071,14 @@ copy_vector(const InType *in, const matrix_info i_info, OutType *out,
         throw "Not supported!";
     }
     const dim3 block(256);
-    const dim3 grid(ceildiv(info.size[0], static_cast<std::size_t>(256)), 1, 1);
+    const dim3 grid(ceildiv(i_info.size[0], static_cast<std::size_t>(256)), 1, 1);
     kernel::copy_vector<<<grid, block>>>(i_info.size[0], in, i_info.stride, out,
                                          o_info.stride);
 }
 
 
 template <typename InType, typename InOutType>
-update_vector(const InType *in, const matrix_info i_info, InOutType *inout,
+void update_vector(const InType *in, const matrix_info i_info, InOutType *inout,
               const matrix_info io_info)
 {
     if (i_info.size[1] != io_info.size[1] || i_info.size[0] != io_info.size[0] ||
@@ -1086,7 +1086,7 @@ update_vector(const InType *in, const matrix_info i_info, InOutType *inout,
         throw "Not supported!";
     }
     const dim3 block(256);
-    const dim3 grid(ceildiv(info.size[0], static_cast<std::size_t>(256)), 1, 1);
+    const dim3 grid(ceildiv(i_info.size[0], static_cast<std::size_t>(256)), 1, 1);
     kernel::update_vector<<<grid, block>>>(i_info.size[0], in, i_info.stride,
                                            inout, io_info.stride);
 }

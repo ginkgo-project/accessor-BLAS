@@ -68,6 +68,35 @@ cusolver_get_handle()
             }};
 }
 
+/*
+namespace {
+#define BIND_CUBLAS_GEAM(ValueType, CublasName)                             \
+    void cublas_geam(cublasHandle_t handle, cublasOperation_t transa,       \
+                     cublasOperation_t transb, int m, int n,                \
+                     const ValueType *alpha, const ValueType *A, int lda,   \
+                     const ValueType *beta, const ValueType *B, int ldb,    \
+                     ValueType *C, int ldc)                                 \
+    {                                                                       \
+        CUBLAS_CALL(CublasName(handle, transa, transb, m, n, alpha, A, lda, \
+                               beta, B, ldb, C, ldc));                      \
+    }
+BIND_CUBLAS_GEMV(double, cublasDgemv)
+BIND_CUBLAS_GEMV(float, cublasSgemv)
+#undef BIND_CUBLAS_GEMV
+
+template <typename T>
+void cublas_transpose(cublasHandle_t handle, const matrix_info minfo, T *mtx)
+{
+    T alpha{1};
+    T beta{0};
+    cublas_geam(handle, CUBLAS_OP_T, CUBLAS_OP_N, );
+}
+
+
+}  // namespace
+*/
+
+
 template <typename ValueType>
 class IrMemory {
 private:
@@ -75,19 +104,17 @@ private:
     static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
 
 public:
-    template <typename VectGen>
     IrMemory(std::size_t max_rows, std::size_t max_cols,
-             Memory<ValueType> orig_mtx, VectGen &&cpu_vect_gen)
+             Memory<ValueType> orig_mtx)
         : m_info_{{max_rows, max_cols}},
           x_info_{{max_cols, 1}},
           pivot_size_{std::max(m_info_.size[0], m_info_.size[1])},
           cpu_pivot_(Memory<int>::Device::cpu, pivot_size_),
           cpu_mtx_(CPU_device, m_info_.get_1d_size()),
-          cpu_x_(cpu_vect_gen(x_info_)),
+          cpu_x_(CPU_device, x_info_.get_1d_size()),
           gpu_mtx_(GPU_device, m_info_.get_1d_size()),
-          gpu_x_(GPU_device, x_info_.get_1d_size()),
+          gpu_x_(GPU_device, x_info_.get_1d_size())
     {
-        cpu_mtx_.copy_from(orig_mtx);
         gpu_mtx_.copy_from(orig_mtx);
         gpu_x_.copy_from(cpu_x_);
 
@@ -105,9 +132,9 @@ public:
         gpu_info = cpu_info;
 
         for (std::size_t i = 0; i < pivot_size_; ++i) {
-            cpu_pivot_.data()[i] = i;
+            cpu_pivot_.data()[i] = 0;
         }
-        Memory<int> gpu_pivot(Memory<int>::Device::gpu, pivot_size_),
+        Memory<int> gpu_pivot(Memory<int>::Device::gpu, pivot_size_);
         gpu_pivot = cpu_pivot_;
 
         int workspace_size{};
@@ -143,12 +170,10 @@ public:
           cpu_pivot_(Memory<int>::Device::cpu, pivot_size_),
           cpu_mtx_(CPU_device, m_info_.get_1d_size()),
           cpu_x_(CPU_device, x_info_.get_1d_size()),
-          gpu_pivot_(Memory<int>::Device::gpu, pivot_size_),
           gpu_mtx_(GPU_device, m_info_.get_1d_size()),
-          gpu_x_(GPU_device, x_info_.get_1d_size()),
+          gpu_x_(GPU_device, x_info_.get_1d_size())
     {
         cpu_pivot_.copy_from(other.cpu_pivot());
-        gpu_pivot_.copy_from(other.gpu_pivot());
 
         convert(other);
 
@@ -189,6 +214,8 @@ public:
     const ValueType *cpu_mtx() const { return cpu_mtx_const(); }
     const ValueType *cpu_x() const { return cpu_x_const(); }
 
+    Memory<ValueType> &cpu_mtx_memory() { return cpu_mtx_; }
+
 protected:
     ValueType *gpu_mtx() { return gpu_mtx_.data(); }
 
@@ -196,11 +223,12 @@ public:
     ValueType *gpu_x() { return gpu_x_.data(); }
     Memory<ValueType> &gpu_x_memory() { return gpu_x_; }
 
-    const Memory<int> &gpu_pivot() const { return gpu_pivot_; }
     const ValueType *gpu_mtx_const() const { return gpu_mtx_.const_data(); }
     const ValueType *gpu_x_const() const { return gpu_x_.const_data(); }
     const ValueType *gpu_mtx() const { return gpu_mtx_const(); }
     const ValueType *gpu_x() const { return gpu_x_const(); }
+    
+    Memory<ValueType> &gpu_mtx_memory() { return gpu_mtx_; }
 
     const matrix_info m_info_;
     const matrix_info x_info_;
