@@ -106,9 +106,6 @@ int main(int argc, char **argv)
     constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
-    constexpr std::size_t start = std::min(max_rows, std::size_t{50});
-    constexpr std::size_t row_incr = start;
-
     std::default_random_engine rengine(42);
     //*
     std::uniform_real_distribution<ar_type> mtx_dist(-1.0, 1.0);
@@ -179,16 +176,16 @@ int main(int argc, char **argv)
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
-                             trsv_3(m_info, t_matrix_type, d_matrix_type,
-                                    ar_data.gpu_mtx_const(), x_info,
-                                    ar_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type, d_matrix_type,
+                                  ar_data.gpu_mtx_const(), x_info,
+                                  ar_data.gpu_x(), trsv_helper.data());
                          },
                          ar_compute_error},
         benchmark_info_t{"TRSV fp32",
                          [&](matrix_info m_info, matrix_info x_info) {
-                             trsv_3(m_info, t_matrix_type, d_matrix_type,
-                                    st_data.gpu_mtx_const(), x_info,
-                                    st_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type, d_matrix_type,
+                                  st_data.gpu_mtx_const(), x_info,
+                                  st_data.gpu_x(), trsv_helper.data());
                          },
                          st_compute_error},
         benchmark_info_t{"TRSV Acc<fp64, fp64>",
@@ -249,6 +246,10 @@ int main(int argc, char **argv)
     std::cout << std::scientific << std::showpos;
 
     std::vector<value_type> local_res(benchmark_num);
+
+    constexpr std::size_t start = std::min(max_rows, std::size_t{10});
+    constexpr std::size_t row_incr = start;
+
     for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
         const matrix_info m_info{{num_rows, num_rows}, max_cols};
         const matrix_info x_info{{num_rows, 1}};
