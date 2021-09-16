@@ -82,141 +82,6 @@ void control_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
 namespace kernel {
 
 
-// Must be called with 2-D blocks and a 1-element grid
-template <std::int64_t diag_block_size, dmtx_t dmtx, typename ValueType>
-__global__ __launch_bounds__(diag_block_size *diag_block_size) void lower_trsv(
-    const std::int64_t diag_block_start, const matrix_info m_info,
-    const ValueType *__restrict__ mtx, const matrix_info x_info,
-    ValueType *__restrict__ x)
-{
-    // assert: blockDim.x == blockDim.y == diag_block_size
-    // assert: blockIdx.x == blockIdx.y == 1
-    const std::int64_t row_idx = diag_block_start + threadIdx.x;
-    const std::int64_t col_idx = diag_block_start + threadIdx.y;
-    if (diag_block_start >= m_info.size[0]) {
-        return;
-    }
-    const auto group = cg::this_thread_block();
-    constexpr int shared_stride = diag_block_size + 1;
-    __shared__ ValueType shared[diag_block_size * shared_stride];
-
-    // Read into shared memory all necessary matrix data and store it transposed
-    // (with stride = BS+1)
-    if (threadIdx.x <= threadIdx.y && row_idx < m_info.size[0] &&
-        col_idx < m_info.size[1]) {
-        shared[threadIdx.x * shared_stride + threadIdx.y] =
-            (dmtx == dmtx_t::unit && threadIdx.x == threadIdx.y)
-                ? ValueType{1}
-                : mtx[row_idx + col_idx * m_info.stride];
-    }
-    group.sync();
-    auto warp = cg::tiled_partition<WARP_SIZE>(group);
-    if (group.thread_rank() / WARP_SIZE == 0) {
-        const auto warp_id = warp.thread_rank();
-        const std::int64_t x_idx = (diag_block_start + warp_id) * x_info.stride;
-        auto local_solution = x[x_idx];
-
-        for (int i = 0; i < WARP_SIZE; ++i) {
-            const auto mtx_val = shared[i * shared_stride + warp_id];
-            const auto current_x = warp.shfl(local_solution / mtx_val, i);
-            if (warp_id == i) {
-                local_solution = current_x;
-            }
-            if (warp_id > i) {
-                local_solution -= mtx_val * current_x;
-            }
-        }
-        // Write solution back
-        if (diag_block_start + warp_id < x_info.size[0]) {
-            x[x_idx] = local_solution;
-        }
-    }
-}
-
-// Must be called with 1-D blocks and 1-D grid
-template <std::int64_t block_size, std::int64_t solved_size, typename ValueType>
-__global__ __launch_bounds__(block_size) void lower_trsv_apply(
-    const std::int64_t apply_start, const matrix_info m_info,
-    const ValueType *__restrict__ mtx, const matrix_info x_info,
-    ValueType *__restrict__ x)
-{
-    // assert: blockDim.x == blockDim.y == diag_block_size
-    // assert: blockDim.x % solved_size == 0
-    const std::int64_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
-    const std::int64_t mtx_row =
-        apply_start + solved_size + global_id / solved_size;
-    const std::int64_t mtx_col = apply_start + global_id % solved_size;
-    if (mtx_row >= m_info.size[0]) {
-        return;
-    }
-    const auto group = cg::this_thread_block();
-    auto warp = cg::tiled_partition<WARP_SIZE>(group);
-    __shared__ ValueType cached_solution[solved_size];
-
-    // Fill in the cached solution with the first solved_size threads
-    if (group.thread_rank() < solved_size) {
-        cached_solution[group.thread_rank()] =
-            x[(apply_start + group.thread_rank()) * x_info.stride];
-    }
-    group.sync();
-    auto local_result =
-        (mtx_col < m_info.size[1])
-            ? mtx[mtx_row * m_info.stride + mtx_col] *
-                  cached_solution[warp.thread_rank() * x_info.stride]
-            : ValueType{0};
-    auto updated_x = reduce(warp, local_result,
-                            [](ValueType a, ValueType b) { return a + b; });
-    // each warp writes once
-    if (warp.thread_rank() == 0) {
-        x[mtx_row] -= updated_x;
-    }
-}
-
-
-}  // namespace kernel
-
-
-template <typename ValueType>
-void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
-          const ValueType *mtx, const matrix_info x_info, ValueType *x)
-{
-    constexpr std::int32_t diag_block_size{kernel::WARP_SIZE};
-    const dim3 block_solve(diag_block_size, diag_block_size, 1);
-    // const dim3 grid(ceildiv<std::int32_t>(m_info.size[0], block_size), 1, 1);
-    const dim3 grid_solve(1, 1, 1);
-    auto run_solve = [&](std::int64_t block_start) {
-        if (dtype == dmtx_t::unit) {
-            kernel::lower_trsv<diag_block_size, dmtx_t::unit>
-                <<<grid_solve, block_solve>>>(block_start, m_info, mtx, x_info,
-                                              x);
-        } else {
-            kernel::lower_trsv<diag_block_size, dmtx_t::non_unit>
-                <<<grid_solve, block_solve>>>(block_start, m_info, mtx, x_info,
-                                              x);
-        }
-    };
-    const std::int32_t block_size_apply = kernel::WARP_SIZE * kernel::WARP_SIZE;
-    const dim3 block_apply(block_size_apply, 1, 1);
-    for (std::int64_t block_start = 0; block_start < m_info.size[0];
-         block_start += kernel::WARP_SIZE) {
-        run_solve(block_start);
-        const dim3 grid_apply(
-            ceildiv(static_cast<std::int64_t>(m_info.size[0]) - block_start,
-                    static_cast<std::int64_t>(block_size_apply /
-                                              kernel::WARP_SIZE)),
-            1, 1);
-        if (block_start + kernel::WARP_SIZE < m_info.size[0]) {
-            kernel::lower_trsv_apply<block_size_apply, kernel::WARP_SIZE>
-                <<<grid_apply, block_apply>>>(block_start, m_info, mtx, x_info,
-                                              x);
-        }
-    }
-}
-
-
-namespace kernel {
-
-
 // Implementation follows paper: A Fast Dense Triangular Solve in CUDA
 //                               https://doi.org/10.1137/12088358X
 
@@ -229,7 +94,7 @@ __global__ __launch_bounds__(1) void trsv_init(std::uint32_t *block_idxs)
 // Must be called with 2-D blocks and a 1-D grid
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename ValueType>
-__global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
+__global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
     const matrix_info m_info, const ValueType *__restrict__ mtx,
     const matrix_info x_info, ValueType *__restrict__ x,
     std::uint32_t *col_row_global_helper)
@@ -399,7 +264,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv_3(
 // Must be called with 2-D blocks and a 1-D grid
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename ValueType>
-__global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
+__global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv(
     const matrix_info m_info, const ValueType *__restrict__ mtx,
     const matrix_info x_info, ValueType *__restrict__ x,
     std::uint32_t *col_row_global_helper)
@@ -573,7 +438,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv_3(
 
 
 template <typename ValueType>
-void trsv_3(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
+void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
             const ValueType *mtx, const matrix_info x_info, ValueType *x,
             std::uint32_t *trsv_helper)
 {
@@ -586,21 +451,21 @@ void trsv_3(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
     kernel::trsv_init<<<1, 1>>>(trsv_helper);
     if (dtype == dmtx_t::unit) {
         if (ttype == tmtx_t::lower) {
-            kernel::lower_trsv_3<subwarp_size, swarps_per_block, dmtx_t::unit>
+            kernel::lower_trsv<subwarp_size, swarps_per_block, dmtx_t::unit>
                 <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x,
                                               trsv_helper);
         } else {
-            kernel::upper_trsv_3<subwarp_size, swarps_per_block, dmtx_t::unit>
+            kernel::upper_trsv<subwarp_size, swarps_per_block, dmtx_t::unit>
                 <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x,
                                               trsv_helper);
         }
     } else {
         if (ttype == tmtx_t::lower) {
-            kernel::lower_trsv_3<subwarp_size, swarps_per_block,
+            kernel::lower_trsv<subwarp_size, swarps_per_block,
                                  dmtx_t::non_unit><<<grid_solve, block_solve>>>(
                 m_info, mtx, x_info, x, trsv_helper);
         } else {
-            kernel::upper_trsv_3<subwarp_size, swarps_per_block,
+            kernel::upper_trsv<subwarp_size, swarps_per_block,
                                  dmtx_t::non_unit><<<grid_solve, block_solve>>>(
                 m_info, mtx, x_info, x, trsv_helper);
         }

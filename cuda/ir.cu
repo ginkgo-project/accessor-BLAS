@@ -157,7 +157,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    //constexpr std::size_t max_rows{24 * 1000};
+    // constexpr std::size_t max_rows{24 * 1000};
     constexpr std::size_t max_rows{12 * 1000};
     constexpr std::size_t max_cols{max_rows};
     // constexpr std::size_t max_rows{10};
@@ -236,12 +236,12 @@ int main(int argc, char **argv)
                              copy_vector(gpu_dp_res.const_data(), x_info,
                                          ar_data.gpu_x(), x_info);
 
-                             trsv_3(m_info, t_matrix_type, d_matrix_type,
-                                    ar_data.gpu_mtx_const(), x_info,
-                                    ar_data.gpu_x(), trsv_helper.data());
-                             trsv_3(m_info, t_matrix_type2, d_matrix_type2,
-                                    ar_data.gpu_mtx_const(), x_info,
-                                    ar_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type, d_matrix_type,
+                                  ar_data.gpu_mtx_const(), x_info,
+                                  ar_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type2, d_matrix_type2,
+                                  ar_data.gpu_mtx_const(), x_info,
+                                  ar_data.gpu_x(), trsv_helper.data());
                              update_vector(ar_data.gpu_x_const(), x_info,
                                            gpu_dp_x.data(), x_info);
                          }},
@@ -249,12 +249,12 @@ int main(int argc, char **argv)
                          [&](matrix_info m_info, matrix_info x_info) {
                              copy_vector(gpu_dp_res.const_data(), x_info,
                                          st_data.gpu_x(), x_info);
-                             trsv_3(m_info, t_matrix_type, d_matrix_type,
-                                    st_data.gpu_mtx_const(), x_info,
-                                    st_data.gpu_x(), trsv_helper.data());
-                             trsv_3(m_info, t_matrix_type2, d_matrix_type2,
-                                    st_data.gpu_mtx_const(), x_info,
-                                    st_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type, d_matrix_type,
+                                  st_data.gpu_mtx_const(), x_info,
+                                  st_data.gpu_x(), trsv_helper.data());
+                             trsv(m_info, t_matrix_type2, d_matrix_type2,
+                                  st_data.gpu_mtx_const(), x_info,
+                                  st_data.gpu_x(), trsv_helper.data());
                              update_vector(st_data.gpu_x(), x_info,
                                            gpu_dp_x.data(), x_info);
                          }},

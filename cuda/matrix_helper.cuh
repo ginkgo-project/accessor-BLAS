@@ -35,30 +35,6 @@ Memory<ValueType> gen_mtx(const matrix_info &info, ValueDist &&dist,
     return res;
 }
 
-// Note: sub-normal values are filtered out
-template <typename ValueType, typename ValueDist, typename Engine>
-Memory<ValueType> gen_dd_mtx(const matrix_info &info, ValueDist &&dist,
-                             Engine &&engine, ValueType diag_val)
-{
-    if (info.stride < info.size[1]) {
-        throw std::runtime_error("Wrong use of stride");
-    }
-    Memory<ValueType> res(Memory<ValueType>::Device::cpu, info.get_1d_size());
-    auto ptr = res.data();
-
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        for (std::size_t col = 0; col < info.size[1]; ++col) {
-            const std::size_t idx = row * info.stride + col;
-            ValueType val{};
-            do {
-                val = dist(engine);
-            } while (!std::isnormal(val));
-            ptr[idx] = (row != col) ? val : diag_val;
-        }
-    }
-
-    return res;
-}
 
 template <typename ValueType, typename ValueDist, typename Engine>
 void write_random(const matrix_info &info, ValueDist &&dist, Engine &&engine,
@@ -72,6 +48,7 @@ void write_random(const matrix_info &info, ValueDist &&dist, Engine &&engine,
     }
 }
 
+
 template <typename ResultType, typename InputType, typename Callable>
 void convert_mtx(const matrix_info &info, const InputType *input,
                  ResultType *output, Callable convert)
@@ -83,6 +60,7 @@ void convert_mtx(const matrix_info &info, const InputType *input,
         }
     }
 }
+
 
 template <typename ValueType>
 void print_mtx(const matrix_info &info, const ValueType *vec)
@@ -102,6 +80,4 @@ void print_mtx(const matrix_info &info, const ValueType *vec)
     // Does not copy some, like precision info
     std::cout.flags(cout_flags);
     std::cout.precision(old_prec);
-    // apparently can throw exceptions since `old_state` is not properly
-    // initialized
 }
