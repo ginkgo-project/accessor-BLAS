@@ -5,6 +5,9 @@
 
 #include <cooperative_groups.h>
 #include <cublas_v2.h>
+
+
+// Accessor headers
 #include <accessor/range.hpp>
 #include <accessor/reduced_row_major.hpp>
 
@@ -13,70 +16,17 @@
 #include "utils.cuh"
 
 
+/**
+ * Type to distinguish between an upper and lower triangular matrix.
+ */
 enum class tmtx_t { upper, lower };
+
+
+/**
+ * Type to distinguish between using the diagonal elements (non_unit) of the
+ * matrix or assuming the diagonal elements are all ones (unit).
+ */
 enum class dmtx_t { non_unit, unit };
-
-
-namespace kernel {
-
-
-// Must be called with 2-D blocks and 1-D grid
-template <std::int64_t block_size>
-__global__ __launch_bounds__(block_size) void test_idx()
-{
-    const std::int64_t diag_block_id = blockIdx.x;
-    const std::int64_t row_idx =
-        diag_block_id * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x;
-    const auto group = cg::this_thread_block();
-    const int idx = group.thread_rank();
-    const auto warp = cg::tiled_partition<WARP_SIZE>(group);
-    const int warp_idx = warp.thread_rank();
-
-    const int tidx = threadIdx.x;
-    const int tidy = threadIdx.y;
-
-    printf("%d, %d: id = %d; warp: %d\n", tidx, tidy, idx, warp_idx);
-}
-
-
-}  // namespace kernel
-
-
-template <typename ValueType>
-void control_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
-                  const ValueType *mtx, const matrix_info x_info, ValueType *x)
-{
-    if (x_info.size[1] != 1) {
-        throw "Error!";
-    };
-    if (ttype == tmtx_t::lower) {
-        for (std::size_t row = 0; row < m_info.size[0]; ++row) {
-            ValueType local_res{0};
-            for (std::size_t col = 0; col < row; ++col) {
-                const std::size_t midx = row * m_info.stride + col;
-                local_res += mtx[midx] * x[col * x_info.stride];
-            }
-            const ValueType diag =
-                dtype == dmtx_t::unit ? 1 : mtx[row * m_info.stride + row];
-            const auto rhs_val = x[row * x_info.stride];
-            x[row * x_info.stride] = (rhs_val - local_res) / diag;
-        }
-    } else {
-        for (std::size_t inv_row = 0; inv_row < m_info.size[0]; ++inv_row) {
-            const auto row = m_info.size[0] - 1 - inv_row;
-            ValueType local_res{0};
-            for (std::size_t inv_col = 0; inv_col < inv_row; ++inv_col) {
-                const auto col = m_info.size[0] - 1 - inv_col;
-                const std::size_t midx = row * m_info.stride + col;
-                local_res += mtx[midx] * x[col * x_info.stride];
-            }
-            const ValueType diag =
-                dtype == dmtx_t::unit ? 1 : mtx[row * m_info.stride + row];
-            const auto rhs_val = x[row * x_info.stride];
-            x[row * x_info.stride] = (rhs_val - local_res) / diag;
-        }
-    }
-}
 
 
 namespace kernel {
@@ -91,7 +41,31 @@ __global__ __launch_bounds__(1) void trsv_init(std::uint32_t *block_idxs)
     block_idxs[1] = 0;                  // next block row
 }
 
-// Must be called with 2-D blocks and a 1-D grid
+/**
+ * Solves a lower triangular matrix with a single kernel. The matrix must be
+ * in row-major format. The vector acts both as the right hand side and as the
+ * output of the solution.
+ *
+ * @note swarp_size must be a power of 2 and smaller than WARP_SIZE.
+ *       Additionally, the thread block must be 2D (x and y), while the grid
+ *       must be 1D.
+ *
+ * @tparam swarp_size  subwarp-size. Must be equal to the x-dimension of the
+ *                     thread block size.
+ * @tparam swarps_per_block  number of subwarps per block. Must be equal to the
+ *                           y dimension of the thread block size.
+ * @tparam dmtx  determines if the diagonal matrix elements are read or
+ *               considered ones
+ * @tparam ValueType  Type of the matrix and vector elements.
+ *
+ * @param m_info  Information about the row-major matrix
+ * @param mtx  row-major matrix
+ * @param x_info  Information about the vector (acts as right hand side and x)
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param col_row_global_helper  global pointer to two variables needed in the
+ *                               algorithm
+ */
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename ValueType>
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
@@ -112,17 +86,17 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
 
     // stores the trianglular system in column major
     __shared__ ValueType triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx[1];
+    __shared__ std::uint32_t shared_row_block_idx;
     __shared__ ValueType x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx =
+        shared_row_block_idx =
             atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
-    const index_type row_block_idx = *shared_row_block_idx;
+    const index_type row_block_idx = shared_row_block_idx;
 
     if (row_block_idx * swarp_size >= m_info.size[0]) {
         return;
@@ -194,7 +168,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
         const index_type global_col = col_block * swarp_size + threadIdx.x;
 
         // Wait until result is known for current column block
-        // Maybe add __nanosleep(200) to ensure it is yielded
         if (threadIdx.x == 0 && threadIdx.y == 0) {
             // Note: this needs to be signed since the initial value is
             //       ~0 (all ones)
@@ -261,7 +234,32 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
     }
 }
 
-// Must be called with 2-D blocks and a 1-D grid
+
+/**
+ * Solves a upper triangular matrix with a single kernel. The matrix must be
+ * in row-major format. The vector acts both as the right hand side and as the
+ * output of the solution.
+ *
+ * @note swarp_size must be a power of 2 and smaller than WARP_SIZE.
+ *       Additionally, the thread block must be 2D (x and y), while the grid
+ *       must be 1D.
+ *
+ * @tparam swarp_size  subwarp-size. Must be equal to the x-dimension of the
+ *                     thread block size.
+ * @tparam swarps_per_block  number of subwarps per block. Must be equal to the
+ *                           y dimension of the thread block size.
+ * @tparam dmtx  determines if the diagonal matrix elements are read or
+ *               considered ones
+ * @tparam ValueType  Type of the matrix and vector elements.
+ *
+ * @param m_info  Information about the row-major matrix
+ * @param mtx  row-major matrix
+ * @param x_info  Information about the vector (acts as right hand side and x)
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param col_row_global_helper  global pointer to two variables needed in the
+ *                               algorithm
+ */
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename ValueType>
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv(
@@ -282,17 +280,17 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv(
 
     // stores the trianglular system in column major
     __shared__ ValueType triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx[1];
+    __shared__ std::uint32_t shared_row_block_idx;
     __shared__ ValueType x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx =
+        shared_row_block_idx =
             atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
-    const index_type row_block_idx = *shared_row_block_idx;
+    const index_type row_block_idx = shared_row_block_idx;
 
     if (row_block_idx * swarp_size >= m_info.size[0]) {
         return;
@@ -437,10 +435,27 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv(
 }  // namespace kernel
 
 
+/**
+ * Solves a triangular matrix with a hand-written implementation. The matrix
+ * must be in row-major format. The vector acts both as the right hand side and
+ * as the output of the solution.
+ *
+ * @tparam ValueType  Type of the matrix and vector elements.
+ *
+ * @param m_info  Information about the row-major matrix
+ * @param ttype  triangular matrix type (upper or lower)
+ * @param dtype  determines if the diagonal elements are assumed to be one, or
+ *               if they are read from memory
+ * @param mtx  row-major matrix
+ * @param x_info  Information about the vector (acts as right hand side and x)
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param trsv_helper  device storage to two variables needed in the algorithm
+ */
 template <typename ValueType>
 void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
-            const ValueType *mtx, const matrix_info x_info, ValueType *x,
-            std::uint32_t *trsv_helper)
+          const ValueType *mtx, const matrix_info x_info, ValueType *x,
+          std::uint32_t *trsv_helper)
 {
     constexpr std::int32_t subwarp_size{kernel::WARP_SIZE};
     constexpr std::int32_t swarps_per_block{4};
@@ -461,13 +476,13 @@ void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
         }
     } else {
         if (ttype == tmtx_t::lower) {
-            kernel::lower_trsv<subwarp_size, swarps_per_block,
-                                 dmtx_t::non_unit><<<grid_solve, block_solve>>>(
-                m_info, mtx, x_info, x, trsv_helper);
+            kernel::lower_trsv<subwarp_size, swarps_per_block, dmtx_t::non_unit>
+                <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x,
+                                              trsv_helper);
         } else {
-            kernel::upper_trsv<subwarp_size, swarps_per_block,
-                                 dmtx_t::non_unit><<<grid_solve, block_solve>>>(
-                m_info, mtx, x_info, x, trsv_helper);
+            kernel::upper_trsv<subwarp_size, swarps_per_block, dmtx_t::non_unit>
+                <<<grid_solve, block_solve>>>(m_info, mtx, x_info, x,
+                                              trsv_helper);
         }
     }
 }
@@ -479,7 +494,36 @@ namespace kernel {
 // Implementation follows paper: A Fast Dense Triangular Solve in CUDA
 //                               https://doi.org/10.1137/12088358X
 
-// Must be called with 2-D blocks and a 1-D grid
+/**
+ * Solves a lower triangular matrix with a single kernel. The matrix must be
+ * in row-major format. The vector acts both as the right hand side and as the
+ * output of the solution.
+ *
+ * @internal The main difference to the non-accessor TRSV implementation is that
+ *           the information how data is accessed is now stored in the accessor
+ *           and not as a separate parameter. Other than that, only the read and
+ *           write accesses are different, as they now go through the accessor
+ *           instead of being hand-computed.
+ *
+ * @note swarp_size must be a power of 2 and smaller than WARP_SIZE.
+ *       Additionally, the thread block must be 2D (x and y), while the grid
+ *       must be 1D.
+ *
+ * @tparam swarp_size  subwarp-size. Must be equal to the x-dimension of the
+ *                     thread block size.
+ * @tparam swarps_per_block  number of subwarps per block. Must be equal to the
+ *                           y dimension of the thread block size.
+ * @tparam dmtx  determines if the diagonal matrix elements are read or
+ *               considered ones
+ * @tparam MtxAccessor  Accessor used for the matrix
+ * @tparam VecAccessor  Accessor used for the vector
+ *
+ * @param mtx  row-major matrix
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param col_row_global_helper  global pointer to two variables needed in the
+ *                               algorithm
+ */
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename MtxAccessor, typename VecAccessor>
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
@@ -494,23 +538,23 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
                   "swarp_size must be a multiple of swarps_per_block");
     // assert: blockDim.x == swarp_size; blockDim.y = swarps_per_block;
     //         blockDim.z = 1
-    using ar_type = typename MtxAccessor::arithmetic_type;
+    using ar_type = decltype(mtx(0, 0) * x(0, 0));
     using index_type = std::int64_t;
     constexpr int triang_stride = swarp_size + 1;
 
     // stores the trianglular system in column major
     __shared__ ar_type triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx[1];
+    __shared__ std::uint32_t shared_row_block_idx;
     __shared__ ar_type x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx =
+        shared_row_block_idx =
             atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
-    const index_type row_block_idx = *shared_row_block_idx;
+    const index_type row_block_idx = shared_row_block_idx;
 
     if (row_block_idx * swarp_size >= mtx.length(0)) {
         return;
@@ -582,7 +626,6 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
         const index_type global_col = col_block * swarp_size + threadIdx.x;
 
         // Wait until result is known for current column block
-        // Maybe add __nanosleep(200) to ensure it is yielded
         if (threadIdx.x == 0 && threadIdx.y == 0) {
             // Note: this needs to be signed since the initial value is
             //       ~0 (all ones)
@@ -648,7 +691,37 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
     }
 }
 
-// Must be called with 2-D blocks and a 1-D grid
+
+/**
+ * Solves an upper triangular matrix with a single kernel. The matrix must be
+ * in row-major format. The vector acts both as the right hand side and as the
+ * output of the solution.
+ *
+ * @note swarp_size must be a power of 2 and smaller than WARP_SIZE.
+ *       Additionally, the thread block must be 2D (x and y), while the grid
+ *       must be 1D.
+ *
+ * @internal The main difference to the non-accessor TRSV implementation is that
+ *           the information how data is accessed is now stored in the accessor
+ *           and not as a separate parameter. Other than that, only the read and
+ *           write accesses are different, as they now go through the accessor
+ *           instead of being hand-computed.
+ *
+ * @tparam swarp_size  subwarp-size. Must be equal to the x-dimension of the
+ *                     thread block size.
+ * @tparam swarps_per_block  number of subwarps per block. Must be equal to the
+ *                           y dimension of the thread block size.
+ * @tparam dmtx  determines if the diagonal matrix elements are read or
+ *               considered ones
+ * @tparam MtxAccessor  Accessor used for the matrix
+ * @tparam VecAccessor  Accessor used for the vector
+ *
+ * @param mtx  row-major matrix
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param col_row_global_helper  global pointer to two variables needed in the
+ *                               algorithm
+ */
 template <std::int32_t swarp_size, std::int32_t swarps_per_block, dmtx_t dmtx,
           typename MtxAccessor, typename VecAccessor>
 __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
@@ -663,23 +736,23 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
                   "swarp_size must be a multiple of swarps_per_block");
     // assert: blockDim.x == swarp_size; blockDim.y = swarps_per_block;
     //         blockDim.z = 1
-    using ar_type = typename MtxAccessor::arithmetic_type;
+    using ar_type = decltype(mtx(0, 0) * x(0, 0));
     using index_type = std::int64_t;
     constexpr int triang_stride = swarp_size + 1;
 
     // stores the trianglular system in column major
     __shared__ ar_type triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx[1];
+    __shared__ std::uint32_t shared_row_block_idx;
     __shared__ ar_type x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
     const auto swarp = cg::tiled_partition<swarp_size>(group);
     if (threadIdx.x == 0 && threadIdx.y == 0) {
-        *shared_row_block_idx =
+        shared_row_block_idx =
             atomicInc(col_row_global_helper + 1, ~std::uint32_t{0});
     }
     group.sync();
-    const index_type row_block_idx = *shared_row_block_idx;
+    const index_type row_block_idx = shared_row_block_idx;
 
     if (row_block_idx * swarp_size >= mtx.length(0)) {
         return;
@@ -823,6 +896,25 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
 }  // namespace kernel
 
 
+/**
+ * Solves a triangular matrix with a hand-written implementation utilizing the
+ * accessor. The matrix must be in row-major format. The vector acts both as the
+ * right hand side and as the output of the solution.
+ *
+ * @tparam ArType  Arithmetic type which should be used for all computations
+ * @tparam StType  Type of the storage format, in which the matrix and the
+ *                 vector is
+ *
+ * @param m_info  Information about the row-major matrix
+ * @param ttype  triangular matrix type (upper or lower)
+ * @param dtype  determines if the diagonal elements are assumed to be one, or
+ *               if they are read from memory
+ * @param mtx  row-major matrix
+ * @param x_info  Information about the vector (acts as right hand side and x)
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param trsv_helper  device storage to two variables needed in the algorithm
+ */
 template <typename ArType, typename StType>
 void acc_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
               const StType *mtx, const matrix_info x_info, StType *x,
@@ -868,6 +960,7 @@ void acc_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
     }
 }
 
+
 #define BIND_CUBLAS_TRSV(ValueType, CublasName)                                \
     void cublas_trsv(cublasHandle_t handle, cublasFillMode_t uplo,             \
                      cublasOperation_t trans, cublasDiagType_t dig, int n,     \
@@ -879,6 +972,25 @@ BIND_CUBLAS_TRSV(double, cublasDtrsv)
 BIND_CUBLAS_TRSV(float, cublasStrsv)
 #undef BIND_CUBLAS_TRSV
 
+
+/**
+ * Solves a triangular matrix using CUBLAS kernels. The matrix must be in
+ * row-major format. The vector acts both as the right hand side and as the
+ * output of the solution.
+ *
+ * @tparam ValueType  Type of the matrix and vector elements.
+ *
+ * @param handle  CUBLAS handle, which is required for CUBLAS functionality
+ * @param m_info  Information about the row-major matrix
+ * @param ttype  triangular matrix type (upper or lower)
+ * @param dtype  determines if the diagonal elements are assumed to be one, or
+ *               if they are read from memory
+ * @param mtx  row-major matrix
+ * @param x_info  Information about the vector (acts as right hand side and x)
+ * @param x  The vector which contains the right hand side as input and is used
+ *           at the output simultaneously (will be overwritten with the result).
+ * @param trsv_helper  device storage to two variables needed in the algorithm
+ */
 template <typename ValueType>
 void cublas_trsv(cublasHandle_t handle, tmtx_t ttype, dmtx_t dtype,
                  const matrix_info m_info, const ValueType *mtx,

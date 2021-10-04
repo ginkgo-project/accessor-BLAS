@@ -32,6 +32,9 @@ if (empty_ginkgo_dir)
     message(STATUS "Ginkgo successfully cloned into \"${GINKGO_DIR}\"")
 endif()
 
+
+# This is everything that is needed to use the Ginkgo accessor: C++14 and the
+# Ginkgo directory as include directory to have access to the accessor headers.
 function(example_apply_default_target_settings target)
     target_compile_features("${target}" PUBLIC cxx_std_14)
     target_include_directories("${target}" PRIVATE

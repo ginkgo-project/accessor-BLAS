@@ -17,6 +17,9 @@
 namespace detail {
 
 
+/**
+ * Helper function converting the error from the CUSOLVER to a string
+ */
 std::string get_cusolver_error_string(cusolverStatus_t err)
 {
     switch (err) {
@@ -58,6 +61,10 @@ std::string get_cusolver_error_string(cusolverStatus_t err)
 
 using CusolverContext = std::remove_pointer_t<cusolverDnHandle_t>;
 
+
+/**
+ * @returns a unique_ptr wrapping a CUSOLVER context for RAII.
+ */
 std::unique_ptr<CusolverContext, std::function<void(cusolverDnHandle_t)>>
 cusolver_get_handle()
 {
@@ -68,6 +75,14 @@ cusolver_get_handle()
             }};
 }
 
+
+/**
+ * Manages the host and device memory for all TRSV benchmarks in the specified
+ * precision.
+ *
+ * @tparam ValueType  The precision the managed data is in.
+ */
+
 template <typename ValueType>
 class TrsvMemory {
 private:
@@ -75,11 +90,28 @@ private:
     static constexpr auto GPU_device = Memory<ValueType>::Device::gpu;
 
 public:
+    /**
+     * Allocates and initializes the memory for TRSV benchmarks. The vector and
+     * the matrix are generated with the provided generator functions,
+     * afterwards, the matrix is LU decomposed (happens in-place). The memory is
+     * then mirrored for both CPU and GPU.
+     *
+     * @tparam MtxGen  type of the matrix generator (before doing LU
+     *                 decomposition)
+     * @tparam VectGen  type of the vector generator
+     *
+     * @param max_size  the size (both rows and cols) of the matrix and all
+                        vectors that are allocated
+     * @param cpu_mtx_gen  function generating the CPU matrix memory (including
+     *                     initializing)
+     * @param cpu_vect_gen  function generating the CPU vector memory (including
+     *                      initializing)
+     */
     template <typename MtxGen, typename VectGen>
-    TrsvMemory(std::size_t max_rows, std::size_t max_cols, MtxGen &&cpu_mtx_gen,
+    TrsvMemory(std::size_t max_size, MtxGen &&cpu_mtx_gen,
                VectGen &&cpu_vect_gen)
-        : m_info_{{max_rows, max_cols}},
-          x_info_{{max_cols, 1}},
+        : m_info_{{max_size, max_size}},
+          x_info_{{max_size, 1}},
           cpu_mtx_(cpu_mtx_gen(m_info_)),
           cpu_x_(cpu_vect_gen(x_info_)),
           cpu_x_init_(cpu_x_),
@@ -136,6 +168,16 @@ public:
         cpu_mtx_ = gpu_mtx_;
     }
 
+    /**
+     * Creates a copy of the data from another TrsvMemory (with potentially a
+     * different memory type). To convert different memory types, static_cast is
+     * used.
+     *
+     * @tparam OtherType  memory type of the other object (can be different from
+     * ValueType)
+     *
+     * @param other  GemvMemory object that is copied.
+     */
     template <typename OtherType>
     TrsvMemory(const TrsvMemory<OtherType> &other)
         : m_info_(other.m_info_),
@@ -154,8 +196,15 @@ public:
         gpu_x_init_.copy_from(cpu_x_init_);
     }
 
+    /**
+     * Synchronizes the vector from GPU to CPU.
+     */
     void sync_x() { cpu_x_.copy_from(gpu_x_); }
 
+    /**
+     * Resets the x vector on both host and device to the originally generated
+     * version.
+     */
     void reset_x()
     {
         cpu_x_.copy_from(cpu_x_init_);
@@ -184,9 +233,14 @@ protected:
     ValueType *cpu_mtx() { return cpu_mtx_.data(); }
 
 public:
+    // Returns the CPU vector pointer
     ValueType *cpu_x() { return cpu_x_.data(); }
+    /**
+     * @returns the memory object used for the GPU vector
+     */
     Memory<ValueType> &cpu_x_memory() { return cpu_x_; }
 
+    // Returns a plain pointer to the corresponding CPU memory
     const ValueType *cpu_mtx_const() const { return cpu_mtx_.const_data(); }
     const ValueType *cpu_x_const() const { return cpu_x_.const_data(); }
     const ValueType *cpu_x_init_const() const
@@ -200,9 +254,14 @@ protected:
     ValueType *gpu_mtx() { return gpu_mtx_.data(); }
 
 public:
+    // Returns the GPU vector pointer
     ValueType *gpu_x() { return gpu_x_.data(); }
+    /**
+     * @returns the memory object used for the GPU vector
+     */
     Memory<ValueType> &gpu_x_memory() { return gpu_x_; }
 
+    // Returns a plain pointer to the corresponding GPU memory
     const ValueType *gpu_mtx_const() const { return gpu_mtx_.const_data(); }
     const ValueType *gpu_x_const() const { return gpu_x_.const_data(); }
     const ValueType *gpu_x_init_const() const

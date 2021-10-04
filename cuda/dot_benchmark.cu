@@ -5,6 +5,7 @@
 #include <ios>
 #include <iostream>
 #include <random>
+#include <string>
 #include <type_traits>
 #include <typeinfo>
 #include <vector>
@@ -20,43 +21,56 @@ int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
-    using value_type = ar_type;
 
-    constexpr std::size_t max_size{535 * 1000 * 1000};
+    constexpr std::size_t min_size{1'000'000};
+    constexpr std::size_t default_max_size{535 * 1000 * 1000};
     constexpr char DELIM{';'};
 
     bool detailed_error{false};
+    std::size_t max_size{default_max_size};
 
     const std::string use_error_string("--error");
-    if (argc == 2 && std::string(argv[1]) == use_error_string) {
-        detailed_error = true;
-    } else if (argc > 1) {
+    const std::string set_size_string("--size");
+
+    auto print_usage = [&]() {
         const std::string binary(argv[0]);
-        std::cerr << "Unsupported parameters!\n";
-        std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
-        std::cerr << "With " << use_error_string
-                  << ":    compute detailed error of DOTs\n"
+        std::cerr << "Usage: " << binary << " [" << use_error_string << "] "
+                  << '[' << set_size_string << "=SIZE"
+                  << "]\n";
+        std::cerr << "With:\n"
+                  << use_error_string
+                  << ":    compute detailed error of the DOTs\n"
+                  << set_size_string
+                  << ":     set the maximum size of a vector. Default value: "
+                  << default_max_size << "; Min value: " << min_size << '\n'
                   << "Without parameters: benchmark different DOTs\n";
+    };
+
+    // Process the input arguments
+    for (int i = 1; i < argc; ++i) {
+        const std::string current(argv[i]);
+        if (current == use_error_string) {
+            detailed_error = true;
+        } else if (current.substr(0, set_size_string.size()) ==
+                   set_size_string) {
+            max_size = std::stoll(current.substr(set_size_string.size() + 1));
+        } else {
+            std::cerr << "Unsupported parameter: " << current << '\n';
+            print_usage();
+            return 1;
+        }
+    }
+    if (max_size < min_size) {
+        std::cerr << "The vector size needs to be at least " << min_size
+                  << '\n';
         return 1;
     }
+
+
     std::default_random_engine rengine(42);
-    //*
     std::uniform_real_distribution<ar_type> vector_dist(-1.0, 1.0);
 
-    std::cout << "Distribution vector: [" << vector_dist.a() << ','
-              << vector_dist.b() << "); Type: " << typeid(vector_dist).name()
-              << "\n";
-    /*/
-    std::normal_distribution<value_type> mtx_dist(0.0, 1.0);
-    auto vector_dist = mtx_dist;
-
-    std::cout << "Distribution vector: "
-              << "mean: " << vector_dist.mean()
-              << ", stddev: " << vector_dist.stddev() << ";"
-              << "Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
-    //*/
-
-
+    // Allocate host and device memory
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
     auto st_data = DotMemory<st_type>(ar_data);
 
@@ -73,7 +87,10 @@ int main(int argc, char **argv)
     constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
-                   std::function<value_type()>>;
+                   std::function<ar_type()>>;
+    // This vector contains all necessary information to perform the benchmark.
+    // First, the name of the benchmark, second, a lambda taking the x and y
+    // information of the vectors which then runs the corresponding kernel
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"DOT fp64",
                          [&](matrix_info x_info, matrix_info y_info) {
@@ -89,23 +106,23 @@ int main(int argc, char **argv)
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp64>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot<double>(
+                             acc_dot<ar_type>(
                                  my_handle.get(), x_info, ar_data.gpu_x(),
                                  y_info, ar_data.gpu_y(), ar_data.gpu_res());
                          },
                          ar_get_result},
         benchmark_info_t{"DOT Acc<fp64, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot<double>(
+                             acc_dot<ar_type>(
                                  my_handle.get(), x_info, st_data.gpu_x(),
                                  y_info, st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"DOT Acc<fp32, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
-                             acc_dot<float>(my_handle.get(), x_info,
-                                            st_data.gpu_x(), y_info,
-                                            st_data.gpu_y(), st_data.gpu_res());
+                             acc_dot<st_type>(
+                                 my_handle.get(), x_info, st_data.gpu_x(),
+                                 y_info, st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
         benchmark_info_t{"CUBLAS DOT fp64",
@@ -130,39 +147,38 @@ int main(int argc, char **argv)
         for (const auto &info : benchmark_info) {
             std::cout << DELIM << std::get<0>(info);
         }
-        for (const auto &info : benchmark_info) {
-            std::cout << DELIM << "Error " << std::get<0>(info);
-        }
-    } else {
-        for (const auto &info : benchmark_info) {
-            std::cout << DELIM << "Error " << std::get<0>(info);
-        }
+    }
+    for (const auto &info : benchmark_info) {
+        std::cout << DELIM << "Error " << std::get<0>(info);
     }
     std::cout << '\n';
 
     std::cout.precision(16);
     std::cout << std::scientific;
 
-    auto get_error = [](value_type res, value_type ref_res) -> value_type {
+    // Helper lambda to compute the error, provided the actual result and a
+    // reference result
+    auto get_error = [](ar_type res, ar_type ref_res) -> ar_type {
         return std::abs(res - ref_res) / std::abs(ref_res);
     };
 
     // Number of elements of a vector at the start of the benchmark
-    constexpr std::size_t start = std::min(max_size, std::size_t{1'000'000});
+    const std::size_t start = std::min(max_size, min_size);
     // Increase in number of elements between consecutive benchmark runs
     constexpr std::size_t row_incr = 2'000'000;
     // Number of benchmark runs (ignoring randomization)
-    constexpr std::size_t steps = (max_size - start) / row_incr;
+    const std::size_t steps =
+        (max_size < start) ? 0 : (max_size - start) / row_incr;
     // Number of benchmark restarts with a different randomization for vectors
     // Only used for a detailed error run
     constexpr std::size_t max_randomize_num{10};
 
     std::vector<std::size_t> benchmark_vec_size((steps + 1));
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
-    // std::vector<value_type> benchmark_error((steps + 1) * benchmark_num);
+    // std::vector<ar_type> benchmark_error((steps + 1) * benchmark_num);
     // stores the result for all different benchmark runs to compute the error
     const auto actual_randomize_num = detailed_error ? max_randomize_num : 1;
-    std::vector<value_type> raw_result(actual_randomize_num * (steps + 1) *
+    std::vector<ar_type> raw_result(actual_randomize_num * (steps + 1) *
                                        benchmark_num);
     const auto get_raw_idx = [benchmark_num, actual_randomize_num](
                                  std::size_t rnd, std::size_t step,
@@ -171,6 +187,7 @@ int main(int argc, char **argv)
                bi * actual_randomize_num + rnd;
     };
 
+    // Run all benchmarks and collect the raw data here
     for (std::size_t randomize = 0; randomize < actual_randomize_num;
          ++randomize) {
         if (randomize != 0) {
@@ -197,15 +214,10 @@ int main(int argc, char **argv)
                 raw_result[get_raw_idx(randomize, i, bi)] =
                     std::get<2>(benchmark_info[bi])();
             }
-            // const auto result_ref =
-            //    raw_result[get_raw_idx(randomize, i, benchmark_reference)];
-            // for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-            //    const std::size_t idx = i * benchmark_num + bi;
-            //    benchmark_error.at(idx) +=
-            //        get_error(raw_result[get_raw_idx(bi)], result_ref);
-            //}
         }
     }
+
+    // Print the evaluated results
     for (std::size_t i = 0; i <= steps; ++i) {
         if (!detailed_error) {
             std::cout << benchmark_vec_size[i];
@@ -224,15 +236,16 @@ int main(int argc, char **argv)
             std::cout << benchmark_vec_size[i];
             for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
                 // sort and compute the median
-                std::array<value_type, max_randomize_num> local_error;
+                std::array<ar_type, max_randomize_num> local_error;
                 for (std::size_t rnd = 0; rnd < actual_randomize_num; ++rnd) {
                     const auto result_ref =
                         raw_result[get_raw_idx(rnd, i, benchmark_reference)];
                     local_error[rnd] = get_error(
                         raw_result[get_raw_idx(rnd, i, bi)], result_ref);
                 }
+                // Compute the median of the error
                 std::sort(local_error.begin(), local_error.end());
-                value_type median{};
+                ar_type median{};
                 if (actual_randomize_num % 2 == 1) {
                     median = local_error[actual_randomize_num / 2];
                 } else {
@@ -249,10 +262,12 @@ int main(int argc, char **argv)
     if (!detailed_error) {
         return 0;
     }
+    // Additionally, print the actual result of the DOT for each computed
+    // instance.
     std::cout << "--------------------------------------------------\n";
     std::cout << "Random iter" << DELIM << "Vector Size";
     for (const auto &info : benchmark_info) {
-        std::cout << DELIM << "Result" << std::get<0>(info);
+        std::cout << DELIM << "Result " << std::get<0>(info);
     }
     std::cout << '\n';
     for (std::size_t i = 0; i <= steps; ++i) {

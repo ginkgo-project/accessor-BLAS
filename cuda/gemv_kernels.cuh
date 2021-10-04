@@ -1,12 +1,15 @@
 #pragma once
 
+#include <cinttypes>
+
+
 #include <cooperative_groups.h>
 #include <cublas_v2.h>
 
 
+// Accessor headers
 #include <accessor/range.hpp>
 #include <accessor/reduced_row_major.hpp>
-#include <cinttypes>
 
 
 #include "kernel_utils.cuh"
@@ -18,6 +21,12 @@ namespace kernel {
 
 namespace cg = cooperative_groups;
 
+
+/**
+ * Computes the GEMV: res = alpha * mtx * x + beta * res
+ *
+ * @note This function expects mtx to be in row-major format
+ */
 template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void gemv(
     const matrix_info minfo, ValueType alpha, const ValueType *__restrict__ mtx,
@@ -39,8 +48,8 @@ __global__ __launch_bounds__(block_size) void gemv(
 
     for (std::int64_t col = local_id; col < minfo.size[1]; col += block_size) {
         const auto mtx_val = mtx[row_start + col];
-        const auto b_val = x[col * x_info.stride];
-        local_result += mtx_val * b_val;
+        const auto x_val = x[col * x_info.stride];
+        local_result += mtx_val * x_val;
     }
     shared[local_id] = local_result;
     reduce(group, shared, [](ValueType a, ValueType b) { return a + b; });
@@ -54,6 +63,19 @@ __global__ __launch_bounds__(block_size) void gemv(
     }
 }
 
+
+/**
+ * Computes the GEMV: res = alpha * mtx * x + beta * res
+ *
+ * @note This function only performs well if mtx is in row-major format
+ *       (otherwise, the memory operations are not coalesced)
+ *
+ * @internal The main difference to the non-accessor GEMV implementation is that
+ *           the information how data is accessed is now stored in the accessor
+ *           and not as a separate parameter. Other than that, only the read and
+ *           write accesses are different, as they now go through the accessor
+ *           instead of being hand-computed.
+ */
 template <std::int64_t block_size, typename MtxRange, typename XRange,
           typename ResRange, typename ArType>
 __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
@@ -94,25 +116,23 @@ __global__ __launch_bounds__(block_size) void acc_gemv(ArType alpha,
 }  // namespace kernel
 
 
-template <typename ValueType>
-void control_gemv(const matrix_info m_info, ValueType alpha,
-                  const ValueType *mtx, const matrix_info x_info,
-                  ValueType beta, const ValueType *x, ValueType *res)
-{
-    if (x_info.size[1] != 1) {
-        throw "Error!";
-    }
-    for (std::size_t row = 0; row < m_info.size[0]; ++row) {
-        ValueType local_res{0};
-        for (std::size_t col = 0; col < m_info.size[1]; ++col) {
-            const std::size_t midx = row * m_info.stride + col;
-            local_res += mtx[midx] * x[col * x_info.stride];
-        }
-        auto res_idx = row * x_info.stride;
-        res[res_idx] = beta * res[res_idx] + alpha * local_res;
-    }
-}
-
+/**
+ * Computes the GEMV: res = alpha * mtx * x + beta * res
+ * using a self-implemented kernel without the accessor.
+ *
+ * @note This function expects mtx to be in row-major format
+ *
+ * @tparam ValueType  type of the input and output parameters
+ *
+ * @param m_info  Information about the matrix
+ * @param alpha  alpha factor for the GEMV
+ * @param mtx  matrix
+ * @param x_info  Information about the x vector
+ * @param x  x vector
+ * @param res_info  Information about the res vector
+ * @param beta  beta factor for the GEMV
+ * @param res  res vector
+ **/
 template <typename ValueType>
 void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
           const matrix_info x_info, const ValueType *x,
@@ -126,6 +146,25 @@ void gemv(const matrix_info minfo, ValueType alpha, const ValueType *mtx,
         <<<grid, block>>>(minfo, alpha, mtx, x_info, x, res_info, beta, res);
 }
 
+
+/**
+ * Computes the GEMV: res = alpha * mtx * x + beta * res
+ * using a kernel utilizing the accessor.
+ *
+ * @note This function expects mtx to be in row-major format
+ *
+ * @tparam ArType  arithmetic type that should be used in the GEMV
+ * @tparam StType  storage type of the GEMV
+ *
+ * @param m_info  Information about the matrix
+ * @param alpha  alpha factor for the GEMV
+ * @param mtx  matrix
+ * @param x_info  Information about the x vector
+ * @param x  x vector
+ * @param res_info  Information about the res vector
+ * @param beta  beta factor for the GEMV
+ * @param res  res vector
+ **/
 template <typename ArType, typename StType>
 void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
               const matrix_info x_info, const StType *x,
@@ -154,6 +193,8 @@ void acc_gemv(const matrix_info minfo, ArType alpha, const StType *mtx,
 }
 
 
+// Use a macro to overload the CUBLAS GEMV calls instead of hand-writing them.
+// Also allows for easier extension (for example for complex types).
 #define BIND_CUBLAS_GEMV(ValueType, CublasName)                              \
     void cublas_gemv(cublasHandle_t handle, cublasOperation_t transa, int m, \
                      int n, const ValueType *alpha, const ValueType *A,      \
@@ -167,6 +208,25 @@ BIND_CUBLAS_GEMV(double, cublasDgemv)
 BIND_CUBLAS_GEMV(float, cublasSgemv)
 #undef BIND_CUBLAS_GEMV
 
+
+/**
+ * Computes the GEMV: res = alpha * mtx * x + beta * res
+ * using the CUBLAS vendor implementation
+ *
+ * @note This function expects mtx to be in row-major format
+ *
+ * @tparam ValueType  type of the input and output parameters
+ *
+ * @param haldle  CUBLAS handle which is required for CUBLAS operations
+ * @param m_info  Information about the matrix
+ * @param alpha  alpha factor for the GEMV
+ * @param mtx  matrix
+ * @param x_info  Information about the x vector
+ * @param x  x vector
+ * @param res_info  Information about the res vector
+ * @param beta  beta factor for the GEMV
+ * @param res  res vector
+ **/
 template <typename ValueType>
 void cublas_gemv(cublasHandle_t handle, const matrix_info minfo,
                  ValueType alpha, const ValueType *mtx,

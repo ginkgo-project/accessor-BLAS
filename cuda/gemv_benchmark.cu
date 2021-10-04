@@ -16,136 +16,89 @@
 #include "utils.cuh"
 
 
-/**
- * Reduces `tmp` in a binary tree fashion with the reduce operator `op`.
- * Overwrites `tmp` in the process.
- */
-template <typename OutputType, typename InputType, typename ReduceOp>
-OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
-{
-    std::size_t end = info.size[0];
-    for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
-         halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
-        for (std::size_t row = 0; row < halfway; ++row) {
-            if (row + halfway < end) {
-                for (std::size_t col = 0; col < info.size[1]; ++col) {
-                    const std::size_t midx = row * info.stride + col;
-                    const std::size_t midx2 =
-                        (row + halfway) * info.stride + col;
-                    tmp[midx] = op(tmp[midx], tmp[midx2]);
-                }
-            }
-        }
-        end = halfway;
-    }
-    return static_cast<OutputType>(info.size[0] == 1 ? op(tmp[0], {})
-                                                     : op(tmp[0], tmp[1]));
-}
-
-template <typename T>
-T get_value(T val)
-{
-    return val;
-}
-
-/**
- * Compares `mtx1` to `mtx2` by computing: $tmp = abs(mtx1 - mtx2)$, followed by
- * returning $norm1(tmp)$ (which overwrites `tmp`).
- */
-template <typename ReferenceType, typename OtherType, typename ValueType>
-ValueType compare(const matrix_info info, const ReferenceType *mtx1,
-                  const OtherType *mtx2, ValueType *tmp)
-{
-    using return_type = decltype(get_value(ReferenceType{}));
-    static_assert(std::is_same<return_type, ValueType>::value,
-                  "Types must match!");
-
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        const std::size_t midx = row * info.stride;
-        const auto v1 = get_value(mtx1[midx]);
-        const decltype(v1) v2 = get_value(mtx2[midx]);
-        const auto delta = std::abs(v1 - v2);
-        tmp[midx] = delta;
-    }
-
-    return reduce<ValueType>(
-        info, tmp, [](ValueType o1, ValueType o2) { return o1 + o2; });
-}
-
 int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
-    using value_type = ar_type;
 
     constexpr ar_type ar_alpha{1.0};
     constexpr ar_type ar_beta{1.0};
     constexpr st_type st_alpha{static_cast<st_type>(ar_alpha)};
     constexpr st_type st_beta{static_cast<st_type>(ar_beta)};
 
+    constexpr std::size_t default_max_size{24500};
+    constexpr std::size_t min_size{100};
+    std::size_t max_size{default_max_size};
+
     bool measure_error{false};
 
     const std::string use_error_string("--error");
-    if (argc == 2 && std::string(argv[1]) == use_error_string) {
-        measure_error = true;
-    } else if (argc > 1) {
+    const std::string set_size_string("--size");
+
+    auto print_usage = [&]() {
         const std::string binary(argv[0]);
-        std::cerr << "Unsupported parameters!\n";
-        std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
-        std::cerr << "With " << use_error_string
-                  << ":    compute error of GEMVs\n"
+        std::cerr << "Usage: " << binary << " [" << use_error_string << "] "
+                  << '[' << set_size_string << "=SIZE"
+                  << "]\n";
+        std::cerr << "With:\n"
+                  << use_error_string << ":    compute errors of the GEMVs\n"
+                  << set_size_string
+                  << ":     set the maximum size (used for both rows and cols) "
+                     "of the matrix. Default value: "
+                  << default_max_size << "; Min value: " << min_size << '\n'
                   << "Without parameters: benchmark different GEMVs\n";
+    };
+
+    // Process the input arguments
+    for (int i = 1; i < argc; ++i) {
+        const std::string current(argv[i]);
+        if (current == use_error_string) {
+            measure_error = true;
+        } else if (current.substr(0, set_size_string.size()) ==
+                   set_size_string) {
+            max_size = std::stoll(current.substr(set_size_string.size() + 1));
+        } else {
+            std::cerr << "Unsupported parameter: " << current << '\n';
+            print_usage();
+            return 1;
+        }
+    }
+    if (max_size < min_size) {
+        std::cerr << "The matrix size needs to be at least " << min_size
+                  << '\n';
         return 1;
     }
 
+    // The result vector only needs to be reset if we measure the error AND the
+    // beta value is non-zero. Otherwise, the initial result values don't matter
+    // for the computation.
     const bool reset_result{measure_error && ar_beta != 0};
     const bool normalize_error{true};
 
-    constexpr std::size_t max_rows{24500};
-    constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     std::default_random_engine rengine(42);
-    //*
     std::uniform_real_distribution<ar_type> mtx_dist(-1.0, 1.0);
     auto vector_dist = mtx_dist;
 
-    std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
-              << "); vector: [" << vector_dist.a() << ',' << vector_dist.b()
-              << "); Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
-    /*/
-    std::normal_distribution<value_type> mtx_dist(0.0, 1.0);
-    auto vector_dist = mtx_dist;
-
-    std::cout << "Distribution matrix: "
-              << "mean: " << mtx_dist.mean()
-              << ", stddev: " << mtx_dist.stddev() << ";"
-              << "vector: "
-              << "mean: " << vector_dist.mean()
-              << ", stddev: " << vector_dist.stddev() << ";"
-              << "Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
-    //*/
-
-
+    // Allocate host and device memory
     auto ar_data =
-        GemvMemory<ar_type>(max_rows, max_cols, mtx_dist, vector_dist, rengine);
+        GemvMemory<ar_type>(max_size, mtx_dist, vector_dist, rengine);
     auto st_data = GemvMemory<st_type>(ar_data);
 
     auto cublasHandle = cublas_get_handle();
-
-    static_assert(max_rows == max_cols, "Matrix must be square!");
 
     // Additional memory and lambdas for error computation
     const auto max_res_num_elems = ar_data.cpu_res_memory().get_num_elems();
     Memory<ar_type> cpu_res_ref(Memory<ar_type>::Device::cpu,
                                 max_res_num_elems);
-    value_type res_ref_norm{1.0};
+    ar_type res_ref_norm{1.0};
     auto ar_cpu_res_init = ar_data.cpu_res_memory();
     auto st_cpu_res_init = st_data.cpu_res_memory();
-    Memory<value_type> reduce_memory(Memory<ar_type>::Device::cpu,
+    Memory<ar_type> reduce_memory(Memory<ar_type>::Device::cpu,
                                      max_res_num_elems);
     auto ar_compute_error = [&](matrix_info x_info) {
-        value_type error{};
+        ar_type error{};
         if (measure_error) {
             ar_data.sync_result();
             error = compare(x_info, cpu_res_ref.const_data(),
@@ -157,7 +110,7 @@ int main(int argc, char **argv)
         return error / res_ref_norm;
     };
     auto st_compute_error = [&](matrix_info x_info) {
-        value_type error{};
+        ar_type error{};
         if (measure_error) {
             st_data.sync_result();
             error = compare(x_info, cpu_res_ref.const_data(),
@@ -173,7 +126,10 @@ int main(int argc, char **argv)
     using benchmark_info_t =
         std::tuple<std::string,
                    std::function<void(matrix_info, matrix_info, matrix_info)>,
-                   std::function<value_type(matrix_info)>>;
+                   std::function<ar_type(matrix_info)>>;
+    // This vector contains all necessary information to perform the benchmark.
+    // First, the name of the benchmark, second, a lambda taking the matrix, x
+    // and result information which then runs the corresponding kernel
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{
             "GEMV fp64",
@@ -250,12 +206,12 @@ int main(int argc, char **argv)
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
 
-    std::vector<value_type> local_res(benchmark_num);
-    constexpr auto start = 100;
+    std::vector<ar_type> local_res(benchmark_num);
+    constexpr auto start = min_size;
     constexpr auto row_incr = start;
-    for (std::size_t num_rows = start; num_rows <= max_rows;
+    for (std::size_t num_rows = start; num_rows <= max_size;
          num_rows += row_incr) {
-        const matrix_info m_info{{num_rows, num_rows}, max_rows};
+        const matrix_info m_info{{num_rows, num_rows}, max_size};
         const matrix_info x_info{{num_rows, 1}};
         const matrix_info res_info{{num_rows, 1}};
 
@@ -264,7 +220,7 @@ int main(int argc, char **argv)
                                                              res_info);
             cpu_res_ref.copy_from(ar_data.gpu_res_memory());
             if (normalize_error) {
-                res_ref_norm = reduce<value_type>(
+                res_ref_norm = reduce<ar_type>(
                     res_info, cpu_res_ref.data(), [](ar_type a, ar_type b) {
                         return std::abs(a) + std::abs(b);
                     });

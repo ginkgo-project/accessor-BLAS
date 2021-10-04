@@ -17,115 +17,62 @@
 #include "utils.cuh"
 
 
-template <typename OutputType, typename InputType, typename ReduceOp>
-OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
-{
-    std::size_t end = info.size[0];
-    for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
-         halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
-        for (std::size_t row = 0; row < halfway; ++row) {
-            if (row + halfway < end) {
-                for (std::size_t col = 0; col < info.size[1]; ++col) {
-                    const std::size_t midx = row * info.stride + col;
-                    const std::size_t midx2 =
-                        (row + halfway) * info.stride + col;
-                    tmp[midx] = op(tmp[midx], tmp[midx2]);
-                }
-            }
-        }
-        end = halfway;
-    }
-    return static_cast<OutputType>(info.size[0] == 1 ? op(tmp[0], {})
-                                                     : op(tmp[0], tmp[1]));
-}
-
-template <typename T>
-std::enable_if_t<std::is_floating_point<T>::value, T> get_value(T val)
-{
-    return val;
-}
-
-template <typename T>
-std::enable_if_t<!std::is_floating_point<T>::value, typename T::value_type>
-get_value(T val)
-{
-    return val.e;
-}
-
-template <typename ReferenceType, typename OtherType, typename ValueType>
-ValueType compare(const matrix_info info, const ReferenceType *mtx1,
-                  const OtherType *mtx2, ValueType *tmp)
-{
-    using return_type = decltype(get_value(ReferenceType{}));
-    static_assert(std::is_same<return_type, ValueType>::value,
-                  "Types must match!");
-
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        const std::size_t midx = row * info.stride;
-        const auto v1 = get_value(mtx1[midx]);
-        const decltype(v1) v2 = get_value(mtx2[midx]);
-        if (std::is_floating_point<decltype(v1)>::value) {
-            const auto delta = std::abs(v1 - v2);
-            tmp[midx] = delta;
-        } else {
-            // only compute the 1-norm of the error
-            const auto error = std::abs(v2);
-            tmp[midx] = error;
-        }
-    }
-
-    return reduce<ValueType>(
-        info, tmp, [](ValueType o1, ValueType o2) { return o1 + o2; });
-}
-
 int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
-    using value_type = ar_type;
 
     constexpr tmtx_t t_matrix_type = tmtx_t::upper;
     constexpr dmtx_t d_matrix_type = dmtx_t::unit;
 
+    constexpr std::size_t default_max_size{24 * 1000};
+    constexpr std::size_t min_size{100};
+
+    std::size_t max_size{default_max_size};
     bool measure_error{false};
 
     const std::string use_error_string("--error");
-    if (argc == 2 && std::string(argv[1]) == use_error_string) {
-        measure_error = true;
-    } else if (argc > 1) {
+    const std::string set_size_string("--size");
+
+    auto print_usage = [&]() {
         const std::string binary(argv[0]);
-        std::cerr << "Unsupported parameters!\n";
-        std::cerr << "Usage: " << binary << " [" << use_error_string << "]\n";
-        std::cerr << "With " << use_error_string
-                  << ":    compute error of TRSVs\n"
+        std::cerr << "Usage: " << binary << " [" << use_error_string << "] "
+                  << '[' << set_size_string << "=SIZE"
+                  << "]\n";
+        std::cerr << "With:\n"
+                  << use_error_string << ":    compute errors of TRSV\n"
+                  << set_size_string
+                  << ":     set the maximum size (used for both rows and cols) "
+                     "of the matrix. Default value: "
+                  << default_max_size << "; Min value: " << min_size << '\n'
                   << "Without parameters: benchmark different TRSVs\n";
+    };
+
+    // Process the input arguments
+    for (int i = 1; i < argc; ++i) {
+        const std::string current(argv[i]);
+        if (current == use_error_string) {
+            measure_error = true;
+        } else if (current.substr(0, set_size_string.size()) ==
+                   set_size_string) {
+            max_size = std::stoll(current.substr(set_size_string.size() + 1));
+        } else {
+            std::cerr << "Unsupported parameter: " << current << '\n';
+            print_usage();
+            return 1;
+        }
+    }
+    if (max_size < min_size) {
+        std::cerr << "The matrix size needs to be at least " << min_size
+                  << '\n';
         return 1;
     }
 
-    constexpr std::size_t max_rows{24 * 1000};
-    constexpr std::size_t max_cols{max_rows};
     constexpr char DELIM{';'};
 
     std::default_random_engine rengine(42);
-    //*
     std::uniform_real_distribution<ar_type> mtx_dist(-1.0, 1.0);
     auto vector_dist = mtx_dist;
-
-    std::cout << "Distribution matrix: [" << mtx_dist.a() << ',' << mtx_dist.b()
-              << "); vector: [" << vector_dist.a() << ',' << vector_dist.b()
-              << "); Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
-    /*/
-    std::normal_distribution<value_type> mtx_dist(0.0, 1.0);
-    auto vector_dist = mtx_dist;
-
-    std::cout << "Distribution matrix: "
-              << "mean: " << mtx_dist.mean()
-              << ", stddev: " << mtx_dist.stddev() << ";"
-              << "vector: "
-              << "mean: " << vector_dist.mean()
-              << ", stddev: " << vector_dist.stddev() << ";"
-              << "Type mtx-dist: " << typeid(mtx_dist).name() << "\n";
-    //*/
 
     auto cpu_mtx_gen = [&](matrix_info m_info) {
         return gen_mtx<ar_type>(m_info, mtx_dist, rengine);
@@ -134,24 +81,23 @@ int main(int argc, char **argv)
         return gen_mtx<ar_type>(v_info, vector_dist, rengine);
     };
 
+    // Allocate host and device memory
     auto ar_data =
-        TrsvMemory<ar_type>(max_rows, max_cols, cpu_mtx_gen, cpu_vect_gen);
+        TrsvMemory<ar_type>(max_size, cpu_mtx_gen, cpu_vect_gen);
     auto st_data = TrsvMemory<st_type>(ar_data);
 
     auto cublasHandle = cublas_get_handle();
 
-    static_assert(max_rows == max_cols, "Matrix must be square!");
-
     // Additional memory and lambdas for error computation
     const auto max_res_num_elems = ar_data.cpu_x_memory().get_num_elems();
     Memory<ar_type> cpu_x_ref(Memory<ar_type>::Device::cpu, max_res_num_elems);
-    value_type res_ref_norm{1.0};
-    Memory<value_type> reduce_memory(Memory<ar_type>::Device::cpu,
+    ar_type res_ref_norm{1.0};
+    Memory<ar_type> reduce_memory(Memory<ar_type>::Device::cpu,
                                      max_res_num_elems);
     Memory<std::uint32_t> trsv_helper(Memory<std::uint32_t>::Device::gpu, 2);
 
     auto ar_compute_error = [&](matrix_info x_info) {
-        value_type error{};
+        ar_type error{};
         ar_data.sync_x();
         error = compare(x_info, cpu_x_ref.const_data(), ar_data.cpu_x_const(),
                         reduce_memory.data());
@@ -159,7 +105,7 @@ int main(int argc, char **argv)
         return error / res_ref_norm;
     };
     auto st_compute_error = [&](matrix_info x_info) {
-        value_type error{};
+        ar_type error{};
         st_data.sync_x();
         error = compare(x_info, cpu_x_ref.const_data(), st_data.cpu_x_const(),
                         reduce_memory.data());
@@ -172,7 +118,10 @@ int main(int argc, char **argv)
     constexpr std::size_t benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
-                   std::function<value_type(matrix_info)>>;
+                   std::function<ar_type(matrix_info)>>;
+    // This vector contains all necessary information to perform the benchmark.
+    // First, the name of the benchmark, second, a lambda taking the matrix and
+    // the vector information which then runs the corresponding kernel
     std::vector<benchmark_info_t> benchmark_info = {
         benchmark_info_t{"TRSV fp64",
                          [&](matrix_info m_info, matrix_info x_info) {
@@ -245,20 +194,20 @@ int main(int argc, char **argv)
     // showpos: show + sign for positive numbers
     std::cout << std::scientific << std::showpos;
 
-    std::vector<value_type> local_res(benchmark_num);
+    std::vector<ar_type> local_res(benchmark_num);
 
-    constexpr std::size_t start = std::min(max_rows, std::size_t{10});
-    constexpr std::size_t row_incr = start;
+    const std::size_t start = std::min(max_size, min_size);
+    const std::size_t row_incr = start;
 
-    for (auto num_rows = start; num_rows <= max_rows; num_rows += row_incr) {
-        const matrix_info m_info{{num_rows, num_rows}, max_cols};
+    for (auto num_rows = start; num_rows <= max_size; num_rows += row_incr) {
+        const matrix_info m_info{{num_rows, num_rows}, max_size};
         const matrix_info x_info{{num_rows, 1}};
 
         if (measure_error) {
             std::get<1>(benchmark_info[benchmark_reference])(m_info, x_info);
             ar_data.sync_x();
             cpu_x_ref = ar_data.cpu_x_memory();
-            res_ref_norm = reduce<value_type>(
+            res_ref_norm = reduce<ar_type>(
                 x_info, cpu_x_ref.data(),
                 [](ar_type a, ar_type b) { return std::abs(a) + std::abs(b); });
             // copy again since the reduce operation overwrites

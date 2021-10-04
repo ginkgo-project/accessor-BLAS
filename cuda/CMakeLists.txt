@@ -1,8 +1,12 @@
 # After `target_source`, list libraries to link against
 function(create_cuda_executable target target_source)
     add_executable("${target}")
+
+    # Sets the C++ standard and sets the accessor directory of Ginkgo as an
+    # include directory (this function is defined in the CMakeLists.txt in the
+    # root directory)
     example_apply_default_target_settings("${target}")
-    
+
     target_sources("${target}" PRIVATE
         ${target_source}
         )
