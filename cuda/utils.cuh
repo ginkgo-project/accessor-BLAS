@@ -279,8 +279,8 @@ double benchmark_function(Callable func, bool skip = false)
 template <typename OutputType, typename InputType, typename ReduceOp>
 OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
 {
-    assert(("The given matrix must only have a single column!",
-            info.size[1] == 1));
+    // The given matrix must only have a single column!
+    assert(info.size[1] == 1);
     std::size_t end = info.size[0];
     for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
          halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
@@ -314,8 +314,8 @@ template <typename ReferenceType, typename OtherType, typename ValueType>
 ValueType compare(const matrix_info info, const ReferenceType *mtx1,
                   const OtherType *mtx2, ValueType *tmp)
 {
-    assert(("The given matrix must only have a single column!",
-            info.size[1] == 1));
+    // The given matrix must only have a single column!
+    assert(info.size[1] == 1);
 
     for (std::size_t row = 0; row < info.size[0]; ++row) {
         const std::size_t midx = row * info.stride;
