@@ -232,8 +232,8 @@ void acc_dot(myBlasHandle *handle, const matrix_info x_info, const StType *x,
 
     // Accessor Setup
     constexpr std::size_t dimensionality{2};
-    std::array<std::size_t, dimensionality - 1> x_stride{x_info.stride};
-    std::array<std::size_t, dimensionality - 1> y_stride{y_info.stride};
+    std::array<gko::acc::size_type, dimensionality - 1> x_stride{x_info.stride};
+    std::array<gko::acc::size_type, dimensionality - 1> y_stride{y_info.stride};
 
     using accessor =
         gko::acc::reduced_row_major<dimensionality, ArType, StType>;

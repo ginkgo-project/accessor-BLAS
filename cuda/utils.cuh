@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cassert>
+#include <cinttypes>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -15,10 +16,11 @@
  * Contains information about a row-major matrix.
  */
 struct matrix_info {
+    using size_type = std::int64_t;
     // 2D size of the matrix
-    const std::array<std::size_t, 2> size;
+    const std::array<size_type, 2> size;
     // stride used for the rows.
-    const std::size_t stride;
+    const size_type stride;
 
     /**
      * Sets the given size and stride.
@@ -26,8 +28,8 @@ struct matrix_info {
      * @param size  2D size
      * @param stride  stride (must be larger than size[1])
      */
-    constexpr matrix_info(const std::array<std::size_t, 2> size,
-                          const std::size_t stride)
+    constexpr matrix_info(const std::array<size_type, 2> size,
+                          const size_type stride)
         : size(size), stride{stride}
     {}
 
@@ -37,7 +39,7 @@ struct matrix_info {
      * @param size  2D size
      * @param stride  stride (must be larger than size[1])
      */
-    constexpr matrix_info(const std::array<std::size_t, 2> size)
+    constexpr matrix_info(const std::array<size_type, 2> size)
         : matrix_info{size, size[1]}
     {}
 
@@ -45,12 +47,12 @@ struct matrix_info {
      * @returns the total amount of elements (including elements in the stride)
      *          this matrix occupies.
      */
-    std::size_t get_1d_size() const { return size[0] * stride; }
+    size_type get_1d_size() const { return size[0] * stride; }
     /**
      * @returns the number of elements the matrix has (does not consider the
      *          stride)
      */
-    std::size_t get_num_elems() const { return size[0] * size[1]; }
+    size_type get_num_elems() const { return size[0] * size[1]; }
 };
 
 
@@ -281,13 +283,13 @@ OutputType reduce(const matrix_info info, InputType *tmp, ReduceOp op)
 {
     // The given matrix must only have a single column!
     assert(info.size[1] == 1);
-    std::size_t end = info.size[0];
-    for (std::size_t halfway = ceildiv(info.size[0], std::size_t{2});
-         halfway > 1; halfway = ceildiv(halfway, std::size_t{2})) {
-        for (std::size_t row = 0; row < halfway; ++row) {
+    std::int64_t end = info.size[0];
+    for (std::int64_t halfway = ceildiv(info.size[0], std::int64_t{2});
+         halfway > 1; halfway = ceildiv(halfway, std::int64_t{2})) {
+        for (std::int64_t row = 0; row < halfway; ++row) {
             if (row + halfway < end) {
-                const std::size_t midx = row * info.stride;
-                const std::size_t midx2 = (row + halfway) * info.stride;
+                const auto midx = row * info.stride;
+                const auto midx2 = (row + halfway) * info.stride;
                 tmp[midx] = op(tmp[midx], tmp[midx2]);
             }
         }
@@ -317,8 +319,8 @@ ValueType compare(const matrix_info info, const ReferenceType *mtx1,
     // The given matrix must only have a single column!
     assert(info.size[1] == 1);
 
-    for (std::size_t row = 0; row < info.size[0]; ++row) {
-        const std::size_t midx = row * info.stride;
+    for (typename matrix_info::size_type row = 0; row < info.size[0]; ++row) {
+        const auto midx = row * info.stride;
         const ValueType v1 = mtx1[midx];
         const ValueType v2 = mtx2[midx];
         const auto delta = std::abs(v1 - v2);

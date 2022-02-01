@@ -37,7 +37,7 @@ public:
      * @param engine  random engine used to generate the values
      */
     template <typename MtxDist, typename VectDist, typename RndEngine>
-    GemvMemory(std::size_t max_size, MtxDist &&mtx_dist,
+    GemvMemory(matrix_info::size_type max_size, MtxDist &&mtx_dist,
                VectDist &&vect_dist, RndEngine &&engine)
         : m_info_{{max_size, max_size}},
           x_info_{{max_size, 1}},

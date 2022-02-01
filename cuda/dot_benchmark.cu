@@ -21,13 +21,14 @@ int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
+    using size_type = matrix_info::size_type;
 
-    constexpr std::size_t min_size{1'000'000};
-    constexpr std::size_t default_max_size{535 * 1000 * 1000};
+    constexpr size_type min_size{1'000'000};
+    constexpr size_type default_max_size{535 * 1000 * 1000};
     constexpr char DELIM{';'};
 
     bool detailed_error{false};
-    std::size_t max_size{default_max_size};
+    size_type max_size{default_max_size};
 
     const std::string use_error_string("--error");
     const std::string set_size_string("--size");
@@ -84,7 +85,7 @@ int main(int argc, char **argv)
         return static_cast<ar_type>(st_data.get_result());
     };
 
-    constexpr std::size_t benchmark_reference{0};
+    constexpr size_type benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string, std::function<void(matrix_info, matrix_info)>,
                    std::function<ar_type()>>;
@@ -139,7 +140,7 @@ int main(int argc, char **argv)
                                         st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result}};
-    const std::size_t benchmark_num{benchmark_info.size()};
+    const size_type benchmark_num{static_cast<size_type>(benchmark_info.size())};
 
 
     std::cout << "Vector Size";
@@ -163,17 +164,17 @@ int main(int argc, char **argv)
     };
 
     // Number of elements of a vector at the start of the benchmark
-    const std::size_t start = std::min(max_size, min_size);
+    const size_type start = std::min(max_size, min_size);
     // Increase in number of elements between consecutive benchmark runs
-    constexpr std::size_t row_incr = 2'000'000;
+    constexpr size_type row_incr = 2'000'000;
     // Number of benchmark runs (ignoring randomization)
-    const std::size_t steps =
+    const size_type steps =
         (max_size < start) ? 0 : (max_size - start) / row_incr;
     // Number of benchmark restarts with a different randomization for vectors
     // Only used for a detailed error run
-    constexpr std::size_t max_randomize_num{10};
+    constexpr size_type max_randomize_num{10};
 
-    std::vector<std::size_t> benchmark_vec_size((steps + 1));
+    std::vector<size_type> benchmark_vec_size((steps + 1));
     std::vector<double> benchmark_time((steps + 1) * benchmark_num);
     // std::vector<ar_type> benchmark_error((steps + 1) * benchmark_num);
     // stores the result for all different benchmark runs to compute the error
@@ -181,14 +182,14 @@ int main(int argc, char **argv)
     std::vector<ar_type> raw_result(actual_randomize_num * (steps + 1) *
                                        benchmark_num);
     const auto get_raw_idx = [benchmark_num, actual_randomize_num](
-                                 std::size_t rnd, std::size_t step,
-                                 std::size_t bi) {
+                                 size_type rnd, size_type step,
+                                 size_type bi) {
         return step * actual_randomize_num * benchmark_num +
                bi * actual_randomize_num + rnd;
     };
 
     // Run all benchmarks and collect the raw data here
-    for (std::size_t randomize = 0; randomize < actual_randomize_num;
+    for (size_type randomize = 0; randomize < actual_randomize_num;
          ++randomize) {
         if (randomize != 0) {
             write_random({{max_size, 1}}, vector_dist, rengine,
@@ -198,14 +199,14 @@ int main(int argc, char **argv)
             ar_data.copy_cpu_to_gpu();
             st_data.convert_from(ar_data);
         }
-        for (std::size_t vec_size = start, i = 0; vec_size <= max_size;
+        for (size_type vec_size = start, i = 0; vec_size <= max_size;
              vec_size += row_incr, ++i) {
             benchmark_vec_size.at(i) = vec_size;
             const matrix_info x_info{{vec_size, 1}};
             const matrix_info y_info{{vec_size, 1}};
 
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
-                const std::size_t idx = i * benchmark_num + bi;
+            for (size_type bi = 0; bi < benchmark_num; ++bi) {
+                const size_type idx = i * benchmark_num + bi;
                 auto curr_lambda = [&]() {
                     std::get<1>(benchmark_info[bi])(x_info, y_info);
                 };
@@ -218,15 +219,15 @@ int main(int argc, char **argv)
     }
 
     // Print the evaluated results
-    for (std::size_t i = 0; i <= steps; ++i) {
+    for (size_type i = 0; i <= steps; ++i) {
         if (!detailed_error) {
             std::cout << benchmark_vec_size[i];
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+            for (size_type bi = 0; bi < benchmark_num; ++bi) {
                 std::cout << DELIM << benchmark_time[i * benchmark_num + bi];
             }
             const auto result_ref =
                 raw_result[get_raw_idx(0, i, benchmark_reference)];
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+            for (size_type bi = 0; bi < benchmark_num; ++bi) {
                 std::cout << DELIM
                           << get_error(raw_result[i * benchmark_num + bi],
                                        result_ref);
@@ -234,10 +235,10 @@ int main(int argc, char **argv)
             std::cout << '\n';
         } else {
             std::cout << benchmark_vec_size[i];
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+            for (size_type bi = 0; bi < benchmark_num; ++bi) {
                 // sort and compute the median
                 std::array<ar_type, max_randomize_num> local_error;
-                for (std::size_t rnd = 0; rnd < actual_randomize_num; ++rnd) {
+                for (size_type rnd = 0; rnd < actual_randomize_num; ++rnd) {
                     const auto result_ref =
                         raw_result[get_raw_idx(rnd, i, benchmark_reference)];
                     local_error[rnd] = get_error(
@@ -270,11 +271,11 @@ int main(int argc, char **argv)
         std::cout << DELIM << "Result " << std::get<0>(info);
     }
     std::cout << '\n';
-    for (std::size_t i = 0; i <= steps; ++i) {
-        for (std::size_t randomize = 0; randomize < actual_randomize_num;
+    for (size_type i = 0; i <= steps; ++i) {
+        for (size_type randomize = 0; randomize < actual_randomize_num;
              ++randomize) {
             std::cout << randomize << DELIM << benchmark_vec_size[i];
-            for (std::size_t bi = 0; bi < benchmark_num; ++bi) {
+            for (size_type bi = 0; bi < benchmark_num; ++bi) {
                 std::cout << DELIM << raw_result[get_raw_idx(randomize, i, bi)];
             }
             std::cout << '\n';

@@ -86,7 +86,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void lower_trsv(
 
     // stores the trianglular system in column major
     __shared__ ValueType triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx;
+    __shared__ std::int32_t shared_row_block_idx;
     __shared__ ValueType x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
@@ -280,7 +280,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void upper_trsv(
 
     // stores the trianglular system in column major
     __shared__ ValueType triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx;
+    __shared__ std::int32_t shared_row_block_idx;
     __shared__ ValueType x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
@@ -461,7 +461,7 @@ void trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
     constexpr std::int32_t swarps_per_block{4};
     const dim3 block_solve(subwarp_size, swarps_per_block, 1);
     const dim3 grid_solve(
-        ceildiv(m_info.size[0], static_cast<std::size_t>(subwarp_size)), 1, 1);
+        ceildiv(m_info.size[0], static_cast<std::int64_t>(subwarp_size)), 1, 1);
 
     kernel::trsv_init<<<1, 1>>>(trsv_helper);
     if (dtype == dmtx_t::unit) {
@@ -544,7 +544,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_lower_trsv(
 
     // stores the trianglular system in column major
     __shared__ ar_type triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx;
+    __shared__ std::int32_t shared_row_block_idx;
     __shared__ ar_type x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
@@ -742,7 +742,7 @@ __global__ __launch_bounds__(swarps_per_block *swarp_size) void acc_upper_trsv(
 
     // stores the trianglular system in column major
     __shared__ ar_type triang[swarp_size * triang_stride];
-    __shared__ std::uint32_t shared_row_block_idx;
+    __shared__ std::int32_t shared_row_block_idx;
     __shared__ ar_type x_correction[swarp_size];
 
     const auto group = cg::this_thread_block();
@@ -922,8 +922,8 @@ void acc_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
 {
     // Accessor Setup
     constexpr std::size_t dimensionality{2};
-    std::array<std::size_t, dimensionality - 1> m_stride{m_info.stride};
-    std::array<std::size_t, dimensionality - 1> x_stride{x_info.stride};
+    std::array<gko::acc::size_type, dimensionality - 1> m_stride{m_info.stride};
+    std::array<gko::acc::size_type, dimensionality - 1> x_stride{x_info.stride};
 
     using accessor =
         gko::acc::reduced_row_major<dimensionality, ArType, StType>;
@@ -936,7 +936,7 @@ void acc_trsv(const matrix_info m_info, tmtx_t ttype, dmtx_t dtype,
     constexpr std::int32_t swarps_per_block{4};
     const dim3 block_solve(subwarp_size, swarps_per_block, 1);
     const dim3 grid_solve(
-        ceildiv(m_info.size[0], static_cast<std::size_t>(subwarp_size)), 1, 1);
+        ceildiv(m_info.size[0], static_cast<std::int64_t>(subwarp_size)), 1, 1);
 
     kernel::trsv_init<<<1, 1>>>(trsv_helper);
     if (dtype == dmtx_t::unit) {

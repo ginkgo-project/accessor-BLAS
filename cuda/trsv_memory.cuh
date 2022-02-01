@@ -108,7 +108,7 @@ public:
      *                      initializing)
      */
     template <typename MtxGen, typename VectGen>
-    TrsvMemory(std::size_t max_size, MtxGen &&cpu_mtx_gen,
+    TrsvMemory(matrix_info::size_type max_size, MtxGen &&cpu_mtx_gen,
                VectGen &&cpu_vect_gen)
         : m_info_{{max_size, max_size}},
           x_info_{{max_size, 1}},
@@ -139,7 +139,7 @@ public:
         const auto pivot_size = std::max(m_info_.size[0], m_info_.size[1]);
         Memory<int> cpu_pivot(Memory<int>::Device::cpu, pivot_size);
         Memory<int> gpu_pivot(Memory<int>::Device::gpu, pivot_size);
-        for (std::size_t i = 0; i < pivot_size; ++i) {
+        for (matrix_info::size_type i = 0; i < pivot_size; ++i) {
             cpu_pivot.data()[i] = i;
         }
         gpu_pivot = cpu_pivot;
