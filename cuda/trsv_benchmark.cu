@@ -21,14 +21,15 @@ int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
+    using size_type = matrix_info::size_type;
 
     constexpr tmtx_t t_matrix_type = tmtx_t::upper;
     constexpr dmtx_t d_matrix_type = dmtx_t::unit;
 
-    constexpr std::size_t default_max_size{24 * 1000};
-    constexpr std::size_t min_size{100};
+    constexpr size_type default_max_size{24 * 1000};
+    constexpr size_type min_size{100};
 
-    std::size_t max_size{default_max_size};
+    auto max_size{default_max_size};
     bool measure_error{false};
 
     const std::string use_error_string("--error");
@@ -196,8 +197,8 @@ int main(int argc, char **argv)
 
     std::vector<ar_type> local_res(benchmark_num);
 
-    const std::size_t start = std::min(max_size, min_size);
-    const std::size_t row_incr = start;
+    const auto start = std::min(max_size, min_size);
+    const auto row_incr = start;
 
     for (auto num_rows = start; num_rows <= max_size; num_rows += row_incr) {
         const matrix_info m_info{{num_rows, num_rows}, max_size};

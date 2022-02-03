@@ -34,7 +34,7 @@ public:
      * @param engine  random engine used to generate the values
      */
     template <typename VectDist, typename RndEngine>
-    DotMemory(std::size_t size, VectDist &&vect_dist, RndEngine &&engine)
+    DotMemory(matrix_info::size_type size, VectDist &&vect_dist, RndEngine &&engine)
         : x_info_{{size, 1}},
           y_info_{{size, 1}},
           cpu_x_(gen_mtx<ValueType>(x_info_, vect_dist, engine)),

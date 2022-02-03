@@ -20,15 +20,16 @@ int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
+    using size_type = matrix_info::size_type;
 
     constexpr ar_type ar_alpha{1.0};
     constexpr ar_type ar_beta{1.0};
     constexpr st_type st_alpha{static_cast<st_type>(ar_alpha)};
     constexpr st_type st_beta{static_cast<st_type>(ar_beta)};
 
-    constexpr std::size_t default_max_size{24500};
-    constexpr std::size_t min_size{100};
-    std::size_t max_size{default_max_size};
+    constexpr size_type default_max_size{24500};
+    constexpr size_type min_size{100};
+    size_type max_size{default_max_size};
 
     bool measure_error{false};
 
@@ -122,7 +123,7 @@ int main(int argc, char **argv)
         return error / res_ref_norm;
     };
 
-    constexpr std::size_t benchmark_reference{0};
+    constexpr size_type benchmark_reference{0};
     using benchmark_info_t =
         std::tuple<std::string,
                    std::function<void(matrix_info, matrix_info, matrix_info)>,
@@ -190,7 +191,7 @@ int main(int argc, char **argv)
             },
             st_compute_error},
     };
-    const std::size_t benchmark_num{benchmark_info.size()};
+    const size_type benchmark_num{static_cast<size_type>(benchmark_info.size())};
 
     std::cout << "Num rows";
     for (const auto &info : benchmark_info) {
@@ -209,7 +210,7 @@ int main(int argc, char **argv)
     std::vector<ar_type> local_res(benchmark_num);
     constexpr auto start = min_size;
     constexpr auto row_incr = start;
-    for (std::size_t num_rows = start; num_rows <= max_size;
+    for (size_type num_rows = start; num_rows <= max_size;
          num_rows += row_incr) {
         const matrix_info m_info{{num_rows, num_rows}, max_size};
         const matrix_info x_info{{num_rows, 1}};
@@ -229,7 +230,7 @@ int main(int argc, char **argv)
                 ar_data.gpu_res_memory().copy_from(ar_cpu_res_init);
             }
         }
-        for (std::size_t i = 0; i < benchmark_num; ++i) {
+        for (size_type i = 0; i < benchmark_num; ++i) {
             auto local_func = [&]() {
                 std::get<1>(benchmark_info[i])(m_info, x_info, res_info);
             };
