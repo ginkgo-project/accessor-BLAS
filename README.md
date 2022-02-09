@@ -54,3 +54,24 @@ The main differences between these are:
 1. We have fewer parameters in the range/accesser kernel because stride and size information are integrated into the ranges.
 2. We don't need to compute a 1D index with the range/accessor because indices to both dimensions are fed into the brace operator
 3. For debug purposes (and showcase), we extract the arithmetic type from the accessor.
+
+
+## Plots
+
+So far, we ran the benchmarks and error analysis on an nvidia A100 and on an nvidia V100 GPU.
+
+### Evaluation on the A100
+
+![A100 dot error](plots/a100_dot_error_median_u-1,1.svg)
+![A100 dot flops](plots/a100_dot_flops.svg)
+![A100 gemv error](plots/a100_gemv_error_u-1,1.svg)
+![A100 gemv flops](plots/a100_gemv_flops.svg)
+
+
+### Evaluation on the V100
+
+![V100 dot error](plots/v100_dot_error_median_u-1,1.svg)
+![V100 dot flops](plots/v100_dot_flops.svg)
+![V100 gemv error](plots/v100_gemv_error_u-1,1.svg)
+![V100 gemv error](plots/v100_gemv_flops.svg)
+
