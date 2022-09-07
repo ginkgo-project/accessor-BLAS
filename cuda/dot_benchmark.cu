@@ -11,6 +11,9 @@
 #include <vector>
 
 
+#include <accessor/posit.hpp>
+
+
 #include "dot_kernels.cuh"
 #include "dot_memory.cuh"
 #include "memory.cuh"
@@ -21,6 +24,8 @@ int main(int argc, char **argv)
 {
     using ar_type = double;
     using st_type = float;
+    using posit32 = gko::acc::posit32_2;
+    using posit16 = gko::acc::posit16_2;
     using size_type = matrix_info::size_type;
 
     constexpr size_type min_size{1'000'000};
@@ -74,6 +79,8 @@ int main(int argc, char **argv)
     // Allocate host and device memory
     auto ar_data = DotMemory<ar_type>(max_size, vector_dist, rengine);
     auto st_data = DotMemory<st_type>(ar_data);
+    auto posit32_data = DotMemory<posit32>(ar_data);
+    auto posit16_data = DotMemory<posit16>(ar_data);
 
     auto cublas_handle = cublas_get_handle();
     cublas_set_device_ptr_mode(cublas_handle.get());
@@ -83,6 +90,12 @@ int main(int argc, char **argv)
     auto ar_get_result = [&ar_data]() { return ar_data.get_result(); };
     auto st_get_result = [&st_data]() {
         return static_cast<ar_type>(st_data.get_result());
+    };
+    auto posit32_get_result = [&posit32_data]() {
+        return posit32_data.get_result();
+    };
+    auto posit16_get_result = [&posit16_data]() {
+        return posit16_data.get_result();
     };
 
     constexpr size_type benchmark_reference{0};
@@ -119,6 +132,22 @@ int main(int argc, char **argv)
                                  y_info, st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result},
+        benchmark_info_t{"DOT Acc<fp64, posit32>",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             acc_dot<ar_type>(my_handle.get(), x_info,
+                                              posit32_data.gpu_x(), y_info,
+                                              posit32_data.gpu_y(),
+                                              posit32_data.gpu_res());
+                         },
+                         posit32_get_result},
+        benchmark_info_t{"DOT Acc<fp64, posit16>",
+                         [&](matrix_info x_info, matrix_info y_info) {
+                             acc_dot<ar_type>(my_handle.get(), x_info,
+                                              posit16_data.gpu_x(), y_info,
+                                              posit16_data.gpu_y(),
+                                              posit16_data.gpu_res());
+                         },
+                         posit16_get_result},
         benchmark_info_t{"DOT Acc<fp32, fp32>",
                          [&](matrix_info x_info, matrix_info y_info) {
                              acc_dot<st_type>(
@@ -140,7 +169,8 @@ int main(int argc, char **argv)
                                         st_data.gpu_y(), st_data.gpu_res());
                          },
                          st_get_result}};
-    const size_type benchmark_num{static_cast<size_type>(benchmark_info.size())};
+    const size_type benchmark_num{
+        static_cast<size_type>(benchmark_info.size())};
 
 
     std::cout << "Vector Size";
@@ -180,10 +210,9 @@ int main(int argc, char **argv)
     // stores the result for all different benchmark runs to compute the error
     const auto actual_randomize_num = detailed_error ? max_randomize_num : 1;
     std::vector<ar_type> raw_result(actual_randomize_num * (steps + 1) *
-                                       benchmark_num);
+                                    benchmark_num);
     const auto get_raw_idx = [benchmark_num, actual_randomize_num](
-                                 size_type rnd, size_type step,
-                                 size_type bi) {
+                                 size_type rnd, size_type step, size_type bi) {
         return step * actual_randomize_num * benchmark_num +
                bi * actual_randomize_num + rnd;
     };
@@ -198,6 +227,8 @@ int main(int argc, char **argv)
                          ar_data.cpu_y_nc());
             ar_data.copy_cpu_to_gpu();
             st_data.convert_from(ar_data);
+            posit32_data.convert_from(ar_data);
+            posit16_data.convert_from(ar_data);
         }
         for (size_type vec_size = start, i = 0; vec_size <= max_size;
              vec_size += row_incr, ++i) {

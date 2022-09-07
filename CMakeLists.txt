@@ -20,7 +20,7 @@ if (empty_ginkgo_dir)
     find_package(Git REQUIRED)
 
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" clone --branch develop
+        COMMAND "${GIT_EXECUTABLE}" clone --branch posit_cb_gmres
                     "https://github.com/ginkgo-project/ginkgo.git" "Ginkgo"
         WORKING_DIRECTORY "${accessor_example_BINARY_DIR}"
         RESULT_VARIABLE result
