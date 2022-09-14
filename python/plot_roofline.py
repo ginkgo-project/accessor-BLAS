@@ -167,8 +167,8 @@ plot_detail_dict = {
 
 
 def gemv_compute_flop(size, time_ms):
-    flops = size * (size + 3) # with alpha and beta
-    #flops = size * size # without alpha and beta
+    flops = size * (size + size-1 + 3) # with alpha and beta
+    #flops = size * (2 * size - 1) # without alpha and beta
     Mflops = flops / (1000 * 1000)
     return Mflops / time_ms
 
