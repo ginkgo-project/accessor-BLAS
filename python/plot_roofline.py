@@ -265,7 +265,7 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
-            "file": "./results/20250212_1040_h100_gemv_-1,1.csv",
+            "file": "./results/20250610_0947_h100_gemv_-1,1.csv",
             "header_trans": h_dict_gemv_runtime2,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -278,7 +278,7 @@ plot_dict_list = [
             "yscale": "linear",
         },
         {
-            "file": "./results/20250212_1035_h100_gemv_error_-1,1.csv",
+            "file": "./results/20250610_0946_h100_gemv_error_-1,1.csv",
             "header_trans": h_dict_gemv_error2,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -422,7 +422,7 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
-            "file": "./results/20250212_1041_h100_trsv_-1,1.csv",
+            "file": "./results/20250610_0932_h100_trsv_-1,1.csv",
             "header_trans": h_dict_trsv_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -437,7 +437,7 @@ plot_dict_list = [
             #"ylim": {"bottom": 0, "top": 225,},
         },
         {
-            "file": "./results/20250212_1035_h100_trsv_error_-1,1.csv",
+            "file": "./results/20250610_0934_h100_trsv_error_-1,1.csv",
             "header_trans": h_dict_trsv_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
@@ -592,7 +592,7 @@ plot_dict_list = [
             "yscale": "log",
         },
         {
-            "file": "./results/20250212_1036_h100_dot_-1,1.csv",
+            "file": "./results/20250610_0948_h100_dot_-1,1.csv",
             "header_trans": h_dict_dot_runtime,
             "plot_order": plot_order_flops,
             "plot_detail": plot_detail_dict,
@@ -607,7 +607,7 @@ plot_dict_list = [
             "ylim": {"bottom": 0, "top": None,},
         },
         {
-            "file": "./results/20250212_1026_h100_dot_error_-1,1.csv",
+            "file": "./results/20250610_0949_h100_dot_error_-1,1.csv",
             "header_trans": h_dict_dot_error,
             "plot_order": plot_order_error,
             "plot_detail": plot_detail_dict,
