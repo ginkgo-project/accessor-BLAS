@@ -106,14 +106,14 @@ def read_csv(h_dict, path=None):
 
 ############################### Actual Plotting ###############################
 ### Color definition
-myblue    = (0, 0.4470, 0.7410); # acc
+myblue    = (0, 0.4470, 0.7410); # sp
 myorange  = (0.8500, 0.3250, 0.0980);
-myyellow  = (0.9290, 0.6940, 0.1250);
+myyellow  = (0.9290, 0.6940, 0.1250); # mix
 mymagenta = (0.4940, 0.1840, 0.5560);
-mygreen   = (0.4660, 0.6740, 0.1880); # sp
+mygreen   = (0.4660, 0.6740, 0.1880); # dp
 mycyan    = (0.3010, 0.7450, 0.9330);
-myred     = (0.6350, 0.0780, 0.1840); # dp
-myblack   = (0.2500, 0.2500, 0.2500);
+myred     = (0.6350, 0.0780, 0.1840);
+myblack   = (0.1500, 0.1500, 0.1500);
 mybrown   = (0.6500, 0.1600, 0.1600);
 
 dark_mod = 2
@@ -135,19 +135,19 @@ plot_order_error = ["fp32", "acc_mix", "cublas_fp64", "cublas_fp32"]
 plot_detail_dict = {
     "fp64": {
         "label": "fp64",
-        "color": myred,
+        "color": mygreen,
         "marker": 'X',
         "zorder": 3.1,
         },
     "fp32": {
         "label": "fp32",
-        "color": mygreen,
+        "color": myblue,
         "marker": 'P',
         "zorder": 3.2,
         },
     "acc_mix": {
-        "label": "Accessor<fp64, fp32>",
-        "color": myblue,
+        "label": "Acc<fp64, fp32>",
+        "color": myyellow,
         "marker": 'x',
         "zorder": 3.3,
         },
@@ -159,7 +159,7 @@ plot_detail_dict = {
         },
     "cublas_fp32": {
         "label": "cuBLAS fp32",
-        "color": mymagenta,
+        "color": myblack,
         "marker": '+',
         "zorder": 3.5,
         },
@@ -202,6 +202,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 2,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -222,6 +223,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210829_1839_v100_gemv_time_ms_0,1.csv",
@@ -235,6 +237,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 2,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -250,6 +253,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210831_1147_v100_gemv_error_n0,1.csv",
@@ -263,6 +267,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20250610_0947_h100_gemv_-1,1.csv",
@@ -276,6 +281,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 2,
         },
         {
             "file": "./results/20250610_0946_h100_gemv_error_-1,1.csv",
@@ -289,6 +295,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210526_1201_a100_gemv_time_ms.csv",
@@ -302,6 +309,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 2,
         },
         {
             "file": "./results/20210526_1201_a100_gemv_error.csv",
@@ -315,6 +323,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/20210524_1739_v100_trsv_time_ms.csv",
@@ -329,6 +338,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 1,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -345,6 +355,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210829_1839_v100_trsv_time_ms_0,1.csv",
@@ -358,6 +369,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 1,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -373,6 +385,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210831_1151_v100_trsv_error_n0,1.csv",
@@ -386,6 +399,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/20210526_1131_a100_trsv_time_ms.csv",
@@ -402,6 +416,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 1,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -420,6 +435,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20250610_0932_h100_trsv_-1,1.csv",
@@ -433,6 +449,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 1,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -448,6 +465,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/20210430_2000_v100_dot.csv",
@@ -469,6 +487,7 @@ plot_dict_list = [
             "yscale": "linear",
             "xlim": {"left": None, "right": None,},
             "ylim": {"bottom": 0, "top": None,},
+            "legend_cols": 2,
             #"ylim": {"bottom": 0, "top": 225,},
         },
         {
@@ -492,6 +511,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/2021020210512_0843_v100_dot_error_avg_0,1.csv",
@@ -507,6 +527,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210831_1145_v100_dot_error_n0,1_median.csv",
@@ -520,6 +541,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/20210526_1201_a100_dot.csv",
@@ -538,6 +560,7 @@ plot_dict_list = [
             "yscale": "linear",
             "xlim": {"left": None, "right": None,},
             "ylim": {"bottom": 0, "top": None,},
+            "legend_cols": 2,
         },
         {
             #"file": "./results/20210526_1201_a100_dot_error.csv",
@@ -555,6 +578,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             #"file": "./results/20210526_2058_a100_dot_0,1_error.csv",
@@ -570,6 +594,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210902_0300_ir_12000_error_u-1,1.csv",
@@ -590,6 +615,7 @@ plot_dict_list = [
             "xlabel": "Iteration",
             "ylabel": "Residual norm",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20250610_0948_h100_dot_-1,1.csv",
@@ -605,6 +631,7 @@ plot_dict_list = [
             "yscale": "linear",
             "xlim": {"left": None, "right": None,},
             "ylim": {"bottom": 0, "top": None,},
+            "legend_cols": 2,
         },
         {
             "file": "./results/20250610_0949_h100_dot_error_-1,1.csv",
@@ -618,6 +645,7 @@ plot_dict_list = [
             "xlabel": "Vector size",
             "ylabel": "Relative error",
             "yscale": "log",
+            "legend_cols": 1,
         },
         {
             "file": "./results/20210524_1830_v100_trsv_progress_time_ms.csv",
@@ -662,6 +690,7 @@ plot_dict_list = [
             "xlabel": "Number of rows",
             "ylabel": "GFLOP/s",
             "yscale": "linear",
+            "legend_cols": 1,
             #"xlim": {"left": None, "right": None,},
             #"ylim": {"bottom": 0, "top": 225,},
         },
@@ -779,6 +808,6 @@ if __name__ == "__main__":
         ax.tick_params(axis='x', labelsize=AxisTickSize)
         ax.tick_params(axis='y', labelsize=AxisTickSize)
         
-        ax.legend(loc="best", fontsize=LabelFontSize)
+        ax.legend(loc="best", fontsize=LabelFontSize, ncols=plot_info["legend_cols"])
         #ax.legend(loc="lower right")
         plot_figure(fig, plot_info["plot_name"], plot_info["plot_prefix"])
