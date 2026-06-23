@@ -106,6 +106,49 @@ constexpr ValueType ceildiv(ValueType a, ValueType b)
  */
 void synchronize() { CUDA_CALL(cudaDeviceSynchronize()); }
 
+/**
+ * This class acts as an RAII wrapper for information needed for all BLAS
+ * kernels in this file. It stores the CUDA device property and manages a small
+ * CUDA device memory buffer, which is used for some global reduction kernel.
+ **/
+class myBlasHandle {
+public:
+    myBlasHandle()
+    {
+        CUDA_CALL(cudaGetDeviceProperties(&device_prop_, 0));
+        CUDA_CALL(cudaMalloc(&device_storage_, device_storage_size_bytes_));
+    }
+
+    /**
+     * Returns the CUDA device property for the GPU with the ID 0.
+     *
+     * @returns the CUDA device property for the GPU with the ID 0.
+     */
+    const cudaDeviceProp &get_device_property() const { return device_prop_; }
+
+    /**
+     * Returns a device pointer to a single value of type T.
+     *
+     * @tparam T  Type of the value you want a pointer to.
+     *
+     * @returns a device pointer to a single value of type T.
+     */
+    template <typename T>
+    T *get_device_value_ptr()
+    {
+        static_assert(sizeof(T) < device_storage_size_bytes_,
+                      "The expected type is too large for the device storage!");
+        return reinterpret_cast<T *>(device_storage_);
+    }
+
+    ~myBlasHandle() { cudaFree(device_storage_); }
+
+private:
+    static constexpr std::size_t device_storage_size_bytes_{16};
+    cudaDeviceProp device_prop_;
+    void *device_storage_;
+};
+
 
 /**
  * RAII wrapper for a CUDA event
