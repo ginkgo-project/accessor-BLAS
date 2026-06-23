@@ -29,3 +29,4 @@ find_library(CUSOLVER cusolver
 create_cuda_executable("gemv_benchmark" "gemv_benchmark.cu" "${CUBLAS}")
 create_cuda_executable("dot_benchmark" "dot_benchmark.cu" "${CUBLAS}")
 create_cuda_executable("trsv_benchmark" "trsv_benchmark.cu" "${CUBLAS}" "${CUSOLVER}")
+create_cuda_executable("axpy_benchmark" "axpy_benchmark.cu" "${CUBLAS}")

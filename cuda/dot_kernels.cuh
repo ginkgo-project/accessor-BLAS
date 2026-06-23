@@ -17,52 +17,8 @@
 #include "utils.cuh"
 
 
-constexpr int grids_per_sm{32};
+constexpr int dot_blocks_per_sm{32};
 constexpr int dot_block_size{1024};
-
-
-/**
- * This class acts as an RAII wrapper for information needed for all BLAS
- * kernels in this file. It stores the CUDA device property and manages a small
- * CUDA device memory buffer, which is used for some global reduction kernel.
- **/
-class myBlasHandle {
-public:
-    myBlasHandle()
-    {
-        CUDA_CALL(cudaGetDeviceProperties(&device_prop_, 0));
-        CUDA_CALL(cudaMalloc(&device_storage_, device_storage_size_bytes_));
-    }
-
-    /**
-     * Returns the CUDA device property for the GPU with the ID 0.
-     *
-     * @returns the CUDA device property for the GPU with the ID 0.
-     */
-    const cudaDeviceProp &get_device_property() const { return device_prop_; }
-
-    /**
-     * Returns a device pointer to a single value of type T.
-     *
-     * @tparam T  Type of the value you want a pointer to.
-     *
-     * @returns a device pointer to a single value of type T.
-     */
-    template <typename T>
-    T *get_device_value_ptr()
-    {
-        static_assert(sizeof(T) < device_storage_size_bytes_,
-                      "The expected type is too large for the device storage!");
-        return reinterpret_cast<T *>(device_storage_);
-    }
-
-    ~myBlasHandle() { cudaFree(&device_storage_); }
-
-private:
-    static constexpr std::size_t device_storage_size_bytes_{16};
-    cudaDeviceProp device_prop_;
-    void *device_storage_;
-};
 
 
 namespace kernel {
@@ -196,7 +152,8 @@ void dot(myBlasHandle *handle, const matrix_info x_info, const ValueType *x,
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(
-        handle->get_device_property().multiProcessorCount * grids_per_sm, 1, 1);
+        handle->get_device_property().multiProcessorCount * dot_blocks_per_sm,
+        1, 1);
 
     kernel::init_res<<<1, 1>>>(res);
     kernel::dot<block_size, ValueType>
@@ -228,7 +185,8 @@ void acc_dot(myBlasHandle *handle, const matrix_info x_info, const StType *x,
     constexpr std::int32_t block_size{dot_block_size};
     const dim3 block(block_size, 1, 1);
     const dim3 grid(
-        handle->get_device_property().multiProcessorCount * grids_per_sm, 1, 1);
+        handle->get_device_property().multiProcessorCount * dot_blocks_per_sm,
+        1, 1);
 
     // Accessor Setup
     constexpr std::size_t dimensionality{2};

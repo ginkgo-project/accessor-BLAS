@@ -29,9 +29,10 @@ namespace cg = cooperative_groups;
  */
 template <std::int64_t block_size, typename ValueType>
 __global__ __launch_bounds__(block_size) void gemv(
-    const matrix_info m_info, ValueType alpha, const ValueType *__restrict__ mtx,
-    const matrix_info x_info, const ValueType *__restrict__ x,
-    const matrix_info res_info, ValueType beta, ValueType *__restrict__ res)
+    const matrix_info m_info, ValueType alpha,
+    const ValueType *__restrict__ mtx, const matrix_info x_info,
+    const ValueType *__restrict__ x, const matrix_info res_info, ValueType beta,
+    ValueType *__restrict__ res)
 {
     // expect x_info.size[1] == 1
     const std::int64_t row_idx{blockIdx.x};
@@ -178,7 +179,8 @@ void acc_gemv(const matrix_info m_info, ArType alpha, const StType *mtx,
     constexpr std::size_t dimensionality{2};
     std::array<gko::acc::size_type, dimensionality - 1> m_stride{m_info.stride};
     std::array<gko::acc::size_type, dimensionality - 1> x_stride{x_info.stride};
-    std::array<gko::acc::size_type, dimensionality - 1> res_stride{res_info.stride};
+    std::array<gko::acc::size_type, dimensionality - 1> res_stride{
+        res_info.stride};
 
     using accessor =
         gko::acc::reduced_row_major<dimensionality, ArType, StType>;
